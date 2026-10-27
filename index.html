@@ -7,7 +7,27 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: linear-gradient(180deg, #1e1b4b 0%, #312e81 45%, #0f172a 100%); color: #1f2937; min-height: 100vh; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 14px 40px; }
+  .wrap { max-width: none; margin: 0; padding: 0; width: 100vw; min-height: 100dvh; }
+  .card { margin: 0; border-radius: 0; border-left: 0; border-right: 0; }
+  #investigationCard { padding: 0; }
+  .move-stage { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+  #moveCanvas { width: 100%; height: 100%; }
+  .move-hud { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 20; max-width: 720px; }
+  .joy-base { bottom: 200px; z-index: 20; }
+  .move-action { bottom: 200px; z-index: 20; }
+  #killBtn { bottom: 260px !important; }
+  #reportBtn { bottom: 320px !important; }
+  #sabotageLightsBtn { bottom: 380px !important; }
+  #sabotageDoorsBtn { bottom: 440px !important; }
+  #doorBtn { position: absolute; top: 76px; right: 14px; width: auto; min-width: 190px; padding: 12px 14px; font-size: 15px; z-index: 20; background: #0f766e; box-shadow: 0 4px 0 #134e4a; }
+  #areaPicker { position: absolute; inset: 0; z-index: 30; background: rgba(15,23,42,.92); color: #fff; overflow: auto; padding: 18px; }
+  #areaPicker button { width: auto; }
+  .mission-bar { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 20; margin: 0; max-height: 180px; overflow: auto; }
+  #meetingBtn { position: absolute; left: auto; right: 14px; bottom: 500px; z-index: 20; width: auto; min-width: 190px; margin: 0; }
+  #moveStatus { position: absolute; left: 140px; right: 220px; bottom: 200px; z-index: 20; background: rgba(0,0,0,.55); color: #fff; padding: 6px 10px; border-radius: 10px; }
+  .hero-row img { width: 100%; max-width: 720px; height: auto; border-radius: 16px; }
+  .char-item img, .vote-grid .vote-btn img, .reveal-stage img { width: 72px; height: auto; }
+  .move-side { display: none !important; }
   /* Whole game is landscape-first: wide wrap, side-by-side panels on wide screens */
   #rotateBanner { display: none; }
   @media (orientation: portrait) { #rotateBanner { display: block; } }
@@ -120,11 +140,7 @@
 <div class="wrap">
   <p id="rotateBanner" class="landscape-banner">📱 Xoay ngang điện thoại để chơi — game này chơi ngang sẽ rộng và dễ nhìn hơn. Cầm dọc vẫn chơi được.</p>
   <div class="hero">
-    <div class="hero-row" aria-hidden="true">
-      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#8d6e63" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#8d6e63" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#8d6e63" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#d7ccc8" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="4" fill="#111827"/><circle cx="62" cy="42" r="4" fill="#111827"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><path d="M40 70 Q50 80 60 70" fill="none" stroke="#111827" stroke-width="3"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#5d4037"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#5d4037"/></svg>
-      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#a1887f" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#a1887f" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#a1887f" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#efebe9" stroke="#111827" stroke-width="2"/><path d="M34 42 L42 42 M58 42 L66 42" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><ellipse cx="50" cy="74" rx="8" ry="5" fill="#f48fb1" stroke="#111827" stroke-width="2"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#5d4037"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#5d4037"/></svg>
-      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#795548" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#795548" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#795548" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#d7ccc8" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="3" fill="#111827"/><circle cx="62" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="62" cy="42" r="3" fill="#111827"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><ellipse cx="50" cy="74" rx="12" ry="7" fill="#111827" stroke="#111827" stroke-width="2"/><rect x="30" y="12" width="40" height="14" rx="7" fill="#facc15" stroke="#111827" stroke-width="2"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#4e342e"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#4e342e"/></svg>
-    </div>
+    <div class="hero-row" aria-hidden="true"><img src="assets/media-generation-capybara-nhan-vat-0-15753d0d-f1ec-4ad3-9a6e-c1be6589bcc3.webp" alt="Nhân vật capybara"></div>
     <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
   </div>
   <p class="sub">Game trí tuệ cho nhóm 5–10 người. Một người nhận nhiệm vụ bí mật, cả nhóm điều tra và bỏ phiếu tìm thủ phạm. Phòng chỉ có 2–4 người vẫn chơi được: khi bắt đầu, hệ thống sẽ thêm bot cho đủ 5 người.</p>
@@ -230,7 +246,7 @@
     <p class="landscape-banner">📱 Xoay ngang điện thoại để chơi — game này chơi ngang sẽ rộng và dễ nhìn hơn. Cầm dọc vẫn chơi được.</p>
     <div class="move-hud"><div id="roleHud">Bạn đang vào bản đồ…</div><div id="missionHud" class="small"></div></div>
     <p id="sceneLabel" class="msg"></p>
-    <p class="small">Điện thoại: dùng cần gạt ở góc trái bản đồ. Máy tính: phím WASD hoặc mũi tên. Dấu vết KHÔNG nằm giữa đường — nó giấu trong đồ vật. Đọc câu đố trong Sổ manh mối, đi tới đúng đồ vật, đứng gần rồi bấm nút hành động ở góc phải.</p>
+    <p class="small">Điện thoại: dùng cần gạt ở góc trái. Máy tính: phím WASD hoặc mũi tên. Mỗi khu vực hiển thị RIÊNG, full màn hình — bấm "🚪 Cửa ra" để sang khu vực khác. Dấu vết giấu trong đồ vật trong hình, đọc câu đố trong tag nhiệm vụ ở dưới cùng, đi tới đúng đồ vật rồi bấm nút hành động ở góc phải.</p>
     <div class="move-stage">
       <canvas id="moveCanvas" width="960" height="540"></canvas>
       <div id="joyBase" class="joy-base"><div id="joyKnob" class="joy-knob"></div></div>
@@ -239,8 +255,13 @@
       <button id="reportBtn" class="move-action hidden" style="bottom:134px;background:#f59e0b;box-shadow:0 4px 0 #92400e;">📣 Báo xác</button>
       <button id="sabotageLightsBtn" class="move-action hidden" style="bottom:194px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">💡 Tắt đèn (phá hoại)</button>
       <button id="sabotageDoorsBtn" class="move-action hidden" style="bottom:254px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">🔒 Khóa cửa (phá hoại)</button>
-    </div>
-    
+      <button id="doorBtn" type="button">🚪 Cửa ra — chọn khu vực khác</button>
+      <div id="areaPicker" class="hidden">
+        <h2 style="color:#fff">🚪 Chọn khu vực — vào khu vực nào chỉ thấy riêng khu vực đó</h2>
+        <p class="small" style="color:#e2e8f0">Mỗi địa điểm có nhiều khu vực. Bấm một khu vực để vào, màn hình sẽ đổi sang đúng hình khu vực đó.</p>
+        <div id="areaPickerList"></div>
+        <button id="areaPickerCloseBtn" type="button" class="secondary" style="width:auto">Đóng, ở lại khu vực này</button>
+      </div>
     <div id="missionBar" class="mission-bar">
       <button id="missionToggleBtn" class="mission-toggle" type="button">▼ Ẩn nhiệm vụ &amp; manh mối</button>
       <div id="missionBarBody">
@@ -251,6 +272,8 @@
     </div>
     <p id="moveStatus" class="small msg"></p>
     <button id="meetingBtn">🚨 Họp khẩn — chuyển sang bỏ phiếu</button>
+    </div>
+    
     <div class="move-side">
     <div class="notebook">
       <strong>📓 Sổ manh mối của bạn — câu đố gợi ý (đọc rồi đi tìm đúng đồ vật)</strong>

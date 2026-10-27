@@ -17,7 +17,17 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
 }[c]));
 
 
-// ---------- Capybara characters (original SVG/canvas, no copied assets) ----------
+// ---------- Capybara characters: APPROVED IMAGE ASSETS ONLY ----------
+// Sheet media-generation-capybara-nhan-vat-*.webp (8 in one row) was sliced
+// into assets/capy-0.png .. capy-7.png, cream background made transparent.
+// Same player always gets the same sprite: hash(uid) % 8.
+const CAPY_SPRITES = Array.from({length: 8}, (_, i) => `assets/capy-${i}.png`);
+const capyImg = new Image();
+const capySpriteImgs = CAPY_SPRITES.map((src) => { const im = new Image(); im.src = src; return im; });
+function capySpriteIndex(key) { return Math.abs(hashStr(key)) % 8; }
+function capyImgTag(key, ghost = false) {
+  return `<img src="${CAPY_SPRITES[capySpriteIndex(key)]}" alt="capybara" style="width:72px;height:auto;${ghost ? 'opacity:.45;filter:grayscale(1);' : ''}">`;
+}
 // Brown capybara with deterministic silly face by uid hash: same player keeps
 // the same fur, eyes, mouth and accessory across lobby, map, vote, reveal.
 const CAPY_FURS = ["#8d6e63", "#a1887f", "#795548", "#bcaaa4", "#6d4c41", "#9c7a5a"];
@@ -47,7 +57,8 @@ function capyAccSVG(acc) {
   if (acc === 4) return '<rect x="24" y="24" width="52" height="8" rx="4" fill="#ef4444" stroke="#111827" stroke-width="2"/>';
   return "";
 }
-function capySVG(key, ghost = false) {
+function capySVG(key, ghost = false) { return capyImgTag(key, ghost); }
+function capySVG_OLD(key, ghost = false) {
   const f = capyFace(key);
   const fur = ghost ? "#94a3b8" : f.fur;
   const snout = ghost ? "#e2e8f0" : "#d7ccc8";
@@ -163,91 +174,90 @@ function tallyVotes(votes) {
   return { counts, top, leaders, tie: leaders.length > 1, accusedUid: leaders.length === 1 ? leaders[0] : null };
 }
 
-// ---------- Movement: house map, hidden traces, riddles ----------
-// World 2000x1100, viewport canvas 960x540, camera follows local player.
-// Rooms separated by walls with door gaps; simple axis-separated collision.
-// Traces are HIDDEN inside furniture objects (no glowing markers in open
-// space). Every object gets a faint outline; the object near the player gets
-// a soft glow — the glow does NOT say whether it hides a trace.
-const WORLD_W = 2000, WORLD_H = 1100, VIEW_W = 960, VIEW_H = 540;
-const MAP_ZONES = [
-  { name: "Phòng khách", x: 0, y: 0, w: 800, h: 550, color: "#f5d0a9", floor2: "#eec39a" },
-  { name: "Bếp", x: 800, y: 0, w: 700, h: 550, color: "#bfe3dd", floor2: "#aed8d1" },
-  { name: "Kho", x: 1500, y: 0, w: 500, h: 550, color: "#d9c7a5", floor2: "#cdbb93" },
-  { name: "Hành lang", x: 0, y: 550, w: 2000, h: 150, color: "#e8dcc3", floor2: "#ddd0b2" },
-  { name: "Phòng ngủ", x: 0, y: 700, w: 700, h: 400, color: "#d6c6f0", floor2: "#c9b6ea" },
-  { name: "Thư viện", x: 700, y: 700, w: 650, h: 400, color: "#c9b18c", floor2: "#bda07a" },
-  { name: "Phòng tắm", x: 1350, y: 700, w: 650, h: 400, color: "#bcd9f7", floor2: "#aad0f2" },
+// ---------- Movement: SEPARATE AREAS, IMAGE BACKGROUNDS ONLY ----------
+// Trial: one area = one full-screen image, never all rooms in one image.
+// Player moves inside the current area; "Cửa ra" opens a picker (inside the
+// game frame) listing every location/area; entering another area replaces
+// the whole screen with that area's image. No code-drawn rooms/furniture:
+// objects below are only invisible interaction points placed over the
+// furniture already visible in the background photo.
+const WORLD_W = 960, WORLD_H = 540, VIEW_W = 960, VIEW_H = 540;
+const A = "assets/";
+const AREAS = [
+  { id: "phong-khach", loc: "Nhà", name: "Phòng khách", img: A + "media-generation-phong-khach-0-edadccc3-8bb4-4665-b171-bd96597e31e5.webp" },
+  { id: "bep", loc: "Nhà", name: "Bếp", img: A + "media-generation-bep-0-8ff6570b-c445-4f98-b66f-8e0dfb8ab234.webp" },
+  { id: "phong-ngu", loc: "Nhà", name: "Phòng ngủ", img: A + "media-generation-nha-phong-ngu-0-837799a9-da20-4c0c-a56d-9eb6c2835978.webp" },
+  { id: "phong-tam", loc: "Nhà", name: "Phòng tắm", img: A + "media-generation-phong-tam-0-ee01c1ec-922d-4a9b-b847-8428d98e6cf7.webp" },
+  { id: "hanh-lang", loc: "Nhà", name: "Hành lang", img: A + "media-generation-hanh-lang-0-023de931-a3c5-4e9d-bc22-112662b19e80.webp" },
+  { id: "phong-benh", loc: "Bệnh viện", name: "Phòng bệnh", img: A + "media-generation-benh-vien-0-351ccbfd-c63c-4081-960a-6d3839dae4da.webp" },
+  { id: "cap-cuu", loc: "Bệnh viện", name: "Phòng cấp cứu", img: A + "media-generation-benh-vien-cap-cuu-0-e5a8b867-5659-4d11-a711-c16d41f9192e.webp" },
+  { id: "phong-mo", loc: "Bệnh viện", name: "Phòng mổ", img: A + "media-generation-benh-vien-phong-mo-0-f31eca09-25f1-4614-afa6-7b883a729556.webp" },
+  { id: "le-tan", loc: "Bệnh viện", name: "Quầy lễ tân", img: A + "media-generation-benh-vien-le-tan-0-a417dba1-93bd-40c9-b905-062ef4fb0d13.webp" },
+  { id: "nha-thuoc", loc: "Bệnh viện", name: "Nhà thuốc", img: A + "media-generation-benh-vien-nha-thuoc-0-cca9a390-63be-4f9e-a925-4fba28d3e09c.webp" },
+  { id: "lop-hoc", loc: "Trường học", name: "Lớp học", img: A + "media-generation-truong-hoc-0-678edb0a-5f9d-4b7d-ad73-1ca75cc86b84.webp" },
+  { id: "san-truong", loc: "Trường học", name: "Sân trường", img: A + "media-generation-truong-hoc-san-truong-0-7553a3fa-b081-423b-82c7-e60fa10cda24.webp" },
+  { id: "cang-tin", loc: "Trường học", name: "Căng tin", img: A + "media-generation-truong-hoc-cang-tin-0-6f8ef727-e9ca-466e-8caa-8471ded73b55.webp" },
+  { id: "phong-giao-vien", loc: "Trường học", name: "Phòng giáo viên", img: A + "media-generation-truong-hoc-phong-giao-vien-0-14d206b4-a8ed-47eb-bd42-aaa33a92a41a.webp" },
+  { id: "ban-an", loc: "Quán ăn", name: "Khu bàn ăn", img: A + "media-generation-quan-an-0-d900145f-a206-48aa-b6f7-10e70d65473a.webp" },
+  { id: "bep-quan", loc: "Quán ăn", name: "Bếp quán", img: A + "media-generation-quan-an-bep-0-f8cace14-bd96-4199-89e1-a47ea08db7fc.webp" },
+  { id: "cafe-trong", loc: "Quán cà phê", name: "Khu ngồi trong", img: A + "media-generation-quan-ca-phe-0-a7a2791d-7ecf-40c9-a779-7442046de24e.webp" },
+  { id: "cafe-ngoai", loc: "Quán cà phê", name: "Khu ngồi ngoài trời", img: A + "media-generation-quan-ca-phe-ngoai-troi-0-7248d039-fa71-4964-b7cf-40b32c94880a.webp" },
+  { id: "leu-trai", loc: "Bãi cắm trại", name: "Khu lều", img: A + "media-generation-bai-cam-trai-0-decd1268-83ad-45fe-8e4d-afadf9d39798.webp" },
+  { id: "lua-trai", loc: "Bãi cắm trại", name: "Khu lửa trại", img: A + "media-generation-bai-cam-trai-lua-trai-0-2de3dfc5-7376-4c91-82c0-63ba9f67fc23.webp" },
+  { id: "bo-suoi", loc: "Bãi cắm trại", name: "Bờ suối", img: A + "media-generation-bai-cam-trai-bo-suoi-0-77b9d471-29f4-4061-862b-dafb6b416d13.webp" },
 ];
-// Walls: thickness 12, split so door gaps remain open.
-const WALLS = [
-  { x: 800, y: 0, w: 12, h: 200 }, { x: 800, y: 300, w: 12, h: 250 },
-  { x: 1500, y: 0, w: 12, h: 200 }, { x: 1500, y: 300, w: 12, h: 250 },
-  { x: 0, y: 550, w: 300, h: 12 }, { x: 400, y: 550, w: 600, h: 12 }, { x: 1100, y: 550, w: 600, h: 12 }, { x: 1800, y: 550, w: 200, h: 12 },
-  { x: 0, y: 700, w: 300, h: 12 }, { x: 400, y: 700, w: 600, h: 12 }, { x: 1100, y: 700, w: 600, h: 12 }, { x: 1800, y: 700, w: 200, h: 12 },
-  { x: 700, y: 700, w: 12, h: 150 }, { x: 700, y: 950, w: 12, h: 150 },
-  { x: 1350, y: 700, w: 12, h: 150 }, { x: 1350, y: 950, w: 12, h: 150 },
-];
-// Furniture objects. traceIds are the 6 objects that can hide a trace;
-// every other object is a decoy (same look, same interaction, "nothing here").
+function areaById(id) { return AREAS.find((a) => a.id === id) || AREAS[0]; }
+const areaImgs = {};
+AREAS.forEach((a) => { const im = new Image(); im.src = a.img; areaImgs[a.id] = im; });
+let currentAreaId = "phong-khach";
+function currentArea() { return areaById(currentAreaId); }
+// Interaction points (x,y are centres on the 960x540 area image; the
+// furniture itself is in the photo, these points are invisible except for
+// a soft glow + label when the player is near).
 const OBJECTS = [
-  { id: "sofa", name: "Sofa", room: "Phòng khách", x: 200, y: 280, w: 150, h: 70, color: "#c86f4a" },
-  { id: "table_khach", name: "Bàn khách", room: "Phòng khách", x: 480, y: 150, w: 110, h: 60, color: "#8d6e63" },
-  { id: "tv", name: "Tủ TV", room: "Phòng khách", x: 520, y: 400, w: 130, h: 50, color: "#374151" },
-  { id: "plant_khach", name: "Chậu cây", room: "Phòng khách", x: 650, y: 420, w: 60, h: 60, color: "#4d7c0f" },
-  { id: "stove", name: "Bếp nấu", room: "Bếp", x: 1020, y: 180, w: 120, h: 70, color: "#9ca3af" },
-  { id: "fridge", name: "Tủ lạnh", room: "Bếp", x: 880, y: 400, w: 80, h: 90, color: "#e5e7eb" },
-  { id: "table_bep", name: "Bàn bếp", room: "Bếp", x: 1250, y: 380, w: 120, h: 60, color: "#8d6e63" },
-  { id: "plant_bep", name: "Chậu cây", room: "Bếp", x: 1400, y: 150, w: 60, h: 60, color: "#4d7c0f" },
-  { id: "crate", name: "Thùng kho", room: "Kho", x: 1680, y: 280, w: 100, h: 80, color: "#b45309" },
-  { id: "shelf_kho", name: "Kệ kho", room: "Kho", x: 1850, y: 420, w: 110, h: 50, color: "#92400e" },
-  { id: "box_kho", name: "Hộp kho", room: "Kho", x: 1580, y: 430, w: 80, h: 60, color: "#d97706" },
-  { id: "bed", name: "Giường", room: "Phòng ngủ", x: 180, y: 880, w: 180, h: 110, color: "#7c3aed" },
-  { id: "wardrobe", name: "Tủ quần áo", room: "Phòng ngủ", x: 480, y: 760, w: 110, h: 90, color: "#6d4c41" },
-  { id: "lamp", name: "Đèn ngủ", room: "Phòng ngủ", x: 600, y: 980, w: 50, h: 50, color: "#facc15" },
-  { id: "shelf", name: "Kệ sách", room: "Thư viện", x: 920, y: 880, w: 140, h: 70, color: "#78350f" },
-  { id: "table_tv", name: "Bàn thư viện", room: "Thư viện", x: 1150, y: 780, w: 120, h: 60, color: "#8d6e63" },
-  { id: "plant_tv", name: "Chậu cây", room: "Thư viện", x: 780, y: 980, w: 60, h: 60, color: "#4d7c0f" },
-  { id: "tub", name: "Bồn tắm", room: "Phòng tắm", x: 1620, y: 880, w: 140, h: 90, color: "#e0f2fe" },
-  { id: "mirror", name: "Gương", room: "Phòng tắm", x: 1850, y: 780, w: 90, h: 50, color: "#bae6fd" },
-  { id: "sink", name: "Bồn rửa", room: "Phòng tắm", x: 1440, y: 980, w: 90, h: 60, color: "#f1f5f9" },
-  { id: "chair_hl", name: "Ghế hành lang", room: "Hành lang", x: 900, y: 600, w: 80, h: 50, color: "#a16207" },
-  { id: "paint_hl", name: "Tranh hành lang", room: "Hành lang", x: 1400, y: 600, w: 90, h: 40, color: "#b45309" },
+  { id: "sofa", name: "Sofa", room: "Phòng khách", areaId: "phong-khach", x: 250, y: 330, w: 140, h: 80 },
+  { id: "table_khach", name: "Bàn khách", room: "Phòng khách", areaId: "phong-khach", x: 520, y: 380, w: 120, h: 60 },
+  { id: "plant_khach", name: "Chậu cây", room: "Phòng khách", areaId: "phong-khach", x: 820, y: 360, w: 70, h: 70 },
+  { id: "stove", name: "Bếp nấu", room: "Bếp", areaId: "bep", x: 480, y: 300, w: 130, h: 70 },
+  { id: "fridge", name: "Tủ lạnh", room: "Bếp", areaId: "bep", x: 760, y: 300, w: 80, h: 90 },
+  { id: "bed", name: "Giường", room: "Phòng ngủ", areaId: "phong-ngu", x: 480, y: 330, w: 180, h: 110 },
+  { id: "lamp", name: "Đèn ngủ", room: "Phòng ngủ", areaId: "phong-ngu", x: 800, y: 260, w: 60, h: 60 },
+  { id: "tub", name: "Bồn tắm", room: "Phòng tắm", areaId: "phong-tam", x: 650, y: 330, w: 150, h: 90 },
+  { id: "sink", name: "Bồn rửa", room: "Phòng tắm", areaId: "phong-tam", x: 300, y: 330, w: 90, h: 60 },
+  { id: "table_an", name: "Bàn ăn", room: "Khu bàn ăn", areaId: "ban-an", x: 480, y: 340, w: 150, h: 70 },
+  { id: "desk_hoc", name: "Bàn học", room: "Lớp học", areaId: "lop-hoc", x: 480, y: 340, w: 140, h: 70 },
+  { id: "books_gv", name: "Kệ sách", room: "Phòng giáo viên", areaId: "phong-giao-vien", x: 480, y: 320, w: 130, h: 70 },
+  { id: "bed_benh", name: "Giường bệnh", room: "Phòng bệnh", areaId: "phong-benh", x: 480, y: 330, w: 160, h: 90 },
+  { id: "fire", name: "Lửa trại", room: "Khu lửa trại", areaId: "lua-trai", x: 480, y: 340, w: 120, h: 80 },
 ];
-// Riddles: one per trace object. They point to room/object WITHOUT naming it directly.
 const RIDDLES = [
-  { objectId: "tub", riddle: "🧩 Nơi nước chảy róc rách, soi mình mỗi sáng." },
-  { objectId: "shelf", riddle: "🧩 Nơi giữ những câu chuyện cũ, im lặng và bụi." },
-  { objectId: "stove", riddle: "🧩 Nơi nấu nướng, dao thớt còn mùi." },
-  { objectId: "bed", riddle: "🧩 Nơi giấc mơ ngủ lại, gối còn ấm." },
-  { objectId: "crate", riddle: "🧩 Nơi cất đồ cũ, ít ai mở ra." },
-  { objectId: "sofa", riddle: "🧩 Nơi ngồi kể chuyện, ghế êm và ấm." },
+  { objectId: "tub", riddle: "🧩 Nơi nước chảy róc rách, soi mình mỗi sáng. (Phòng tắm — ở Nhà)" },
+  { id: "x", objectId: "desk_hoc", riddle: "🧩 Nơi học bài, bảng đen và bàn ghế ngay ngắn. (Lớp học — Trường học)" },
+  { objectId: "stove", riddle: "🧩 Nơi nấu nướng, dao thớt còn mùi. (Bếp — ở Nhà)" },
+  { objectId: "bed", riddle: "🧩 Nơi giấc mơ ngủ lại, gối còn ấm. (Phòng ngủ — ở Nhà)" },
+  { objectId: "table_an", riddle: "🧩 Nơi ăn uống, bàn ghế xếp thành hàng. (Quán ăn)" },
+  { objectId: "sofa", riddle: "🧩 Nơi ngồi kể chuyện, ghế êm và ấm. (Phòng khách — ở Nhà)" },
 ];
-function objectById(id) { return OBJECTS.find((o) => o.id === id); }
-// 5 simple tasks (GGD-style). Task objects already exist in OBJECTS.
+// Fix: remove stray key above (kept simple below)
+RIDDLES.forEach((r) => { delete r.id; });
 const TASKS = [
   { id: "task_table", label: "Dọn bàn", objectId: "table_khach" },
   { id: "task_plant", label: "Tưới cây", objectId: "plant_khach" },
   { id: "task_lamp", label: "Sửa đèn", objectId: "lamp" },
-  { id: "task_books", label: "Xếp sách", objectId: "shelf" },
+  { id: "task_books", label: "Xếp sách", objectId: "books_gv" },
   { id: "task_stove", label: "Kiểm tra bếp", objectId: "stove" },
 ];
 function taskByObjectId(id) { return TASKS.find((t) => t.objectId === id); }
 function taskProgress() { return publicState.taskProgress || {}; }
 function tasksDoneCount() { return Object.keys(taskProgress()).length; }
-// Door-gap blocks used only while doors sabotage is active.
-const DOOR_BLOCKS = [
-  { x: 300, y: 550, w: 100, h: 12 }, { x: 1000, y: 550, w: 100, h: 12 }, { x: 1700, y: 550, w: 100, h: 12 },
-  { x: 300, y: 700, w: 100, h: 12 }, { x: 1000, y: 700, w: 100, h: 12 }, { x: 1700, y: 700, w: 100, h: 12 },
-  { x: 800, y: 200, w: 12, h: 100 }, { x: 1500, y: 200, w: 12, h: 100 },
-  { x: 700, y: 850, w: 12, h: 100 }, { x: 1350, y: 850, w: 12, h: 100 },
-];
 function sabotageActive() {
   const s = publicState.sabotage;
   if (!s || !s.until) return null;
   if (Date.now() > s.until) return null;
   return s;
 }
+function objectById(id) { return OBJECTS.find((o) => o.id === id); }
+// 5 simple tasks (GGD-style). Task objects already exist in OBJECTS.
 let lastKillAt = 0, lastSabotageAt = 0, botTaskAt = 0;
 let myPos = null, movePositions = {}, moveTraces = {}, myClues = [], myCollectedIds = [];
 let moveLoopOn = false, lastMoveTick = 0, lastPosSync = 0, posSpawned = false, posAttached = false;
@@ -279,24 +289,14 @@ function renderNotebook() {
 }
 function nearestObject() {
   if (!myPos) return null;
-  let best = null, bestD = 75;
-  OBJECTS.forEach((o) => {
-    const dx = Math.max(o.x - myPos.x, 0, myPos.x - (o.x + o.w));
-    const dy = Math.max(o.y - myPos.y, 0, myPos.y - (o.y + o.h));
-    const d = Math.hypot(dx, dy);
+  let best = null, bestD = 90;
+  OBJECTS.filter((o) => o.areaId === currentAreaId).forEach((o) => {
+    const d = Math.hypot(o.x - myPos.x, o.y - myPos.y);
     if (d < bestD) { bestD = d; best = o; }
   });
   return best;
 }
-function hitsWall(x, y) {
-  const r = 20;
-  if (WALLS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h)) return true;
-  const sab = sabotageActive();
-  if (sab && sab.type === "doors") {
-    if (DOOR_BLOCKS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h)) return true;
-  }
-  return false;
-}
+function hitsWall(x, y) { return false; /* No walls inside a single area image; bounds are clamped in tryMove. Doors are the area-picker button, blocked only by doors sabotage. */ }
 function isDuckRole(role) { return role === "culprit" || role === "accomplice"; }
 function duckUidsFromHost() {
   const out = [];
@@ -309,17 +309,15 @@ function dodoUidFromHost() {
   return null;
 }
 function tryMove(x, y) {
-  // axis-separated so door gaps stay passable
-  let nx = x, ny = y;
-  if (!hitsWall(nx, myPos.y)) myPos.x = Math.max(24, Math.min(WORLD_W - 24, nx));
-  if (!hitsWall(myPos.x, ny)) myPos.y = Math.max(24, Math.min(WORLD_H - 24, ny));
+  myPos.x = Math.max(40, Math.min(WORLD_W - 40, x));
+  myPos.y = Math.max(60, Math.min(WORLD_H - 40, y));
 }
 function syncPos(force) {
   if (!db || !roomCode || !myUid || !myPos) return;
   const now = Date.now();
   if (!force && now - lastPosSync < 100) return;
   lastPosSync = now;
-  set(ref(db, `rooms/${roomCode}/public/positions/${myUid}`), { x: Math.round(myPos.x), y: Math.round(myPos.y) }).catch(() => {});
+  set(ref(db, `rooms/${roomCode}/public/positions/${myUid}`), { x: Math.round(myPos.x), y: Math.round(myPos.y), area: currentAreaId }).catch(() => {});
 }
 function attachPositions() {
   if (posAttached || !db || !roomCode) return;
@@ -330,58 +328,31 @@ function attachPositions() {
     if (!posSpawned && myUid && !movePositions[myUid]) {
       const uids = publicState.players ? Object.keys(publicState.players) : [myUid];
       const idx = Math.max(0, uids.indexOf(myUid));
-      // Spawn in the corridor (no wall there) so nobody starts inside a wall.
-      myPos = { x: 200 + idx * 130, y: 625 };
+      currentAreaId = "phong-khach";
+      myPos = { x: 480 + idx * 40, y: 400 };
       posSpawned = true;
       syncPos(true);
     } else if (movePositions[myUid] && !myPos) {
       myPos = { x: movePositions[myUid].x, y: movePositions[myUid].y };
+      if (movePositions[myUid].area) currentAreaId = movePositions[myUid].area;
     }
   });
   onValue(ref(db, `rooms/${roomCode}/public/traces`), (snap) => { moveTraces = snap.val() || {}; });
 }
 function drawCapyCanvas(ctx, x, y, key, name, isBot, ghost, isMe, moving) {
-  const f = capyFace(key);
-  const fur = ghost ? "#94a3b8" : f.fur;
+  const img = capySpriteImgs[capySpriteIndex(key)];
   const bob = moving ? Math.sin(walkPhase * 1.4) * 2 : Math.sin(Date.now() / 500) * 1.2;
-  const legOff = moving ? Math.sin(walkPhase) * 5 : 0;
   ctx.save();
   if (ghost) ctx.globalAlpha = 0.45;
-  // soft shadow under character
-  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(x, y + 26, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
-  const by = y + bob;
-  ctx.fillStyle = "#5d4037"; ctx.fillRect(x - 16, by + 18 + legOff, 13, 10); ctx.fillRect(x + 3, by + 18 - legOff, 13, 10);
-  ctx.fillStyle = fur; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.ellipse(x - 20, by - 22, 8, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(x + 20, by - 22, 8, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.roundRect(x - 26, by - 28, 52, 52, 20); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#fff"; ctx.globalAlpha = ghost ? 0.45 : 0.18; ctx.beginPath(); ctx.ellipse(x - 12, by - 18, 11, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = ghost ? 0.45 : 1;
-  // snout
-  ctx.fillStyle = ghost ? "#e2e8f0" : "#d7ccc8"; ctx.beginPath(); ctx.roundRect(x - 17, by + 2, 34, 16, 8); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.ellipse(x, by + 10, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
-  if (!ghost) {
-    ctx.fillStyle = "#111827"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 2;
-    if (f.eye === 1) { ctx.beginPath(); ctx.moveTo(x - 14, by - 12); ctx.lineTo(x - 6, by - 4); ctx.moveTo(x - 6, by - 12); ctx.lineTo(x - 14, by - 4); ctx.moveTo(x + 6, by - 12); ctx.lineTo(x + 14, by - 4); ctx.moveTo(x + 14, by - 12); ctx.lineTo(x + 6, by - 4); ctx.stroke(); }
-    else if (f.eye === 2) { ctx.beginPath(); ctx.arc(x - 10, by - 6, 5, Math.PI, 0); ctx.arc(x + 10, by - 6, 5, Math.PI, 0); ctx.stroke(); }
-    else if (f.eye === 3) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x - 10, by - 8, 5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.arc(x - 10, by - 8, 2.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 2.5, 0, Math.PI * 2); ctx.fill(); }
-    else if (f.eye === 4) { ctx.beginPath(); ctx.moveTo(x - 14, by - 12); ctx.lineTo(x - 6, by - 8); ctx.moveTo(x + 6, by - 8); ctx.lineTo(x + 14, by - 12); ctx.stroke(); ctx.beginPath(); ctx.arc(x - 10, by - 4, 2.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
-    else { ctx.beginPath(); ctx.arc(x - 10, by - 8, 3.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 3.5, 0, Math.PI * 2); ctx.fill(); }
-    // mouth
-    if (f.mouth === 0) { ctx.beginPath(); ctx.arc(x, by + 18, 5, 0, Math.PI); ctx.stroke(); ctx.fillStyle = "#f48fb1"; ctx.beginPath(); ctx.ellipse(x, by + 21, 5, 3, 0, 0, Math.PI * 2); ctx.fill(); }
-    else if (f.mouth === 1) { ctx.beginPath(); ctx.arc(x, by + 14, 8, 0, Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); ctx.stroke(); }
-    else if (f.mouth === 2) { ctx.fillStyle = "#5d4037"; ctx.beginPath(); ctx.ellipse(x, by + 19, 8, 5, 0, 0, Math.PI * 2); ctx.fill(); }
-    else { ctx.beginPath(); ctx.arc(x, by + 18, 4, 0, Math.PI * 2); ctx.stroke(); }
-    // accessory (simple)
-    if (f.acc === 1) { ctx.fillStyle = "#111827"; ctx.fillRect(x - 18, by - 14, 14, 8); ctx.fillRect(x + 4, by - 14, 14, 8); }
-    else if (f.acc === 2) { ctx.fillStyle = "#2f7de1"; ctx.beginPath(); ctx.arc(x, by - 26, 16, Math.PI, 0); ctx.fill(); ctx.stroke(); }
-    else if (f.acc === 3) { ctx.fillStyle = "#f9a8d4"; ctx.beginPath(); ctx.arc(x + 20, by - 30, 5, 0, Math.PI * 2); ctx.fill(); }
-    else if (f.acc === 4) { ctx.fillStyle = "#ef4444"; ctx.fillRect(x - 18, by - 26, 36, 6); }
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(x, y + 38, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
+  if (img && img.complete && img.naturalWidth) {
+    ctx.drawImage(img, x - 36, y - 45 + bob, 72, 90);
   }
   ctx.font = "bold 15px system-ui"; ctx.textAlign = "center";
   ctx.fillStyle = "#fff"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 4;
-  ctx.strokeText(name, x, y - 40); ctx.fillText(name, x, y - 40);
-  if (isBot) { ctx.font = "bold 11px system-ui"; ctx.fillStyle = "#059669"; ctx.fillText("BOT", x, y + 40); }
-  if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 2, 36, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.strokeText(name, x, y - 52); ctx.fillText(name, x, y - 52);
+  if (isBot) { ctx.font = "bold 11px system-ui"; ctx.fillStyle = "#059669"; ctx.fillText("BOT", x, y + 58); }
+  if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.stroke(); }
   ctx.restore();
 }
 function nearestPlayer(maxDist) {
@@ -390,7 +361,7 @@ function nearestPlayer(maxDist) {
   let best = null, bestD = maxDist;
   players.forEach((p) => {
     if (p.uid === myUid || p.alive === false) return;
-    const pos = movePositions[p.uid]; if (!pos) return;
+    const pos = movePositions[p.uid]; if (!pos || pos.area !== currentAreaId) return;
     const d = Math.hypot(pos.x - myPos.x, pos.y - myPos.y);
     if (d < bestD) { bestD = d; best = { player: p, dist: d }; }
   });
@@ -401,7 +372,7 @@ function nearestBody(maxDist) {
   const bodies = publicState.bodies || {};
   let best = null, bestD = maxDist;
   Object.entries(bodies).forEach(([uid, b]) => {
-    if (!b) return;
+    if (!b || b.area !== currentAreaId) return;
     const d = Math.hypot(b.x - myPos.x, b.y - myPos.y);
     if (d < bestD) { bestD = d; best = { uid, body: b, dist: d }; }
   });
@@ -445,68 +416,54 @@ function updateActionButtons() {
 function drawMovement() {
   const canvas = $("moveCanvas"); if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  const camX = myPos ? Math.max(0, Math.min(WORLD_W - VIEW_W, myPos.x - VIEW_W / 2)) : 0;
-  const camY = myPos ? Math.max(0, Math.min(WORLD_H - VIEW_H, myPos.y - VIEW_H / 2)) : 0;
+  const area = currentArea();
+  const bg = areaImgs[area.id];
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-  // Rooms with floor texture: alternating planks/dots + soft top gradient
-  MAP_ZONES.forEach((z) => {
-    ctx.fillStyle = z.color; ctx.fillRect(z.x - camX, z.y - camY, z.w, z.h);
-    ctx.fillStyle = z.floor2;
-    for (let px = z.x + 20; px < z.x + z.w; px += 70) { ctx.fillRect(px - camX, z.y - camY, 3, z.h); }
-    for (let py = z.y + 30; py < z.y + z.h; py += 70) { ctx.fillRect(z.x - camX, py - camY, z.w, 2); }
-    const grad = ctx.createLinearGradient(0, z.y - camY, 0, z.y - camY + 60);
-    grad.addColorStop(0, "rgba(255,255,255,.28)"); grad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = grad; ctx.fillRect(z.x - camX, z.y - camY, z.w, 60);
-    ctx.strokeStyle = "rgba(17,24,39,.45)"; ctx.lineWidth = 3; ctx.strokeRect(z.x - camX, z.y - camY, z.w, z.h);
-    ctx.font = "bold 26px system-ui"; ctx.fillStyle = "rgba(17,24,39,.6)"; ctx.textAlign = "left";
-    ctx.fillText(z.name, z.x - camX + 18, z.y - camY + 40);
-  });
-  // Walls with shading
-  WALLS.forEach((w) => {
-    ctx.fillStyle = "#3f3f46"; ctx.fillRect(w.x - camX, w.y - camY, w.w, w.h);
-    ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(w.x - camX, w.y - camY, w.w, 3);
-  });
-  // Furniture: shadow + body + highlight. Near object gets a soft glow,
-  // applied to EVERY object the same way, so glow never reveals a trace.
+  if (bg && bg.complete && bg.naturalWidth) {
+    // cover-crop the area photo into 960x540
+    const sr = bg.naturalWidth / bg.naturalHeight, tr = VIEW_W / VIEW_H;
+    let sw, sh, sx, sy;
+    if (sr > tr) { sh = bg.naturalHeight; sw = sh * tr; sx = (bg.naturalWidth - sw) / 2; sy = 0; }
+    else { sw = bg.naturalWidth; sh = sw / tr; sx = 0; sy = (bg.naturalHeight - sh) / 2; }
+    ctx.drawImage(bg, sx, sy, sw, sh, 0, 0, VIEW_W, VIEW_H);
+  } else {
+    ctx.fillStyle = "#1e293b"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 22px system-ui"; ctx.textAlign = "center";
+    ctx.fillText("Đang tải hình " + area.name + "...", VIEW_W / 2, VIEW_H / 2);
+  }
+  ctx.font = "bold 24px system-ui"; ctx.textAlign = "left";
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 5;
+  ctx.strokeText(area.loc + " — " + area.name, 16, 36); ctx.fillText(area.loc + " — " + area.name, 16, 36);
+  // Interaction points: only a soft glow + label near the player, never a
+  // code-drawn room or furniture. The furniture is already in the photo.
   const nearObj = nearestObject();
-  OBJECTS.forEach((o) => {
-    const sx = o.x - camX, sy = o.y - camY;
-    ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.beginPath(); ctx.roundRect(sx + 4, sy + 6, o.w, o.h, 10); ctx.fill();
-    if (nearObj && nearObj.id === o.id) {
-      const pulse = 8 + Math.sin(Date.now() / 300) * 3;
-      ctx.fillStyle = "rgba(250,204,21,.35)"; ctx.beginPath(); ctx.roundRect(sx - pulse, sy - pulse, o.w + pulse * 2, o.h + pulse * 2, 14); ctx.fill();
-    }
-    ctx.fillStyle = o.color; ctx.strokeStyle = "#111827"; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.roundRect(sx, sy, o.w, o.h, 10); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.fillRect(sx + 6, sy + 5, o.w - 12, 8);
-    ctx.font = "bold 13px system-ui"; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
-    ctx.fillText(o.name, sx + o.w / 2, sy + o.h / 2 + 5);
-  });
-  // Bodies on the map (killed players): ghost capybara + red mark.
+  if (nearObj) {
+    const pulse = 10 + Math.sin(Date.now() / 300) * 3;
+    ctx.fillStyle = "rgba(250,204,21,.35)"; ctx.beginPath(); ctx.arc(nearObj.x, nearObj.y, 42 + pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.font = "bold 15px system-ui"; ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 4;
+    ctx.strokeText(nearObj.name, nearObj.x, nearObj.y - 55); ctx.fillText(nearObj.name, nearObj.x, nearObj.y - 55);
+  }
   const bodies = publicState.bodies || {};
   Object.entries(bodies).forEach(([uid, b]) => {
-    if (!b) return;
-    ctx.fillStyle = "rgba(220,38,38,.9)"; ctx.beginPath(); ctx.arc(b.x - camX, b.y - camY - 34, 14, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "bold 16px system-ui"; ctx.textAlign = "center"; ctx.fillText("X", b.x - camX, b.y - camY - 28);
-    drawCapyCanvas(ctx, b.x - camX, b.y - camY, uid, (b.name || "Xác") + " (xác)", false, true, false, false);
+    if (!b || b.area !== currentAreaId) return;
+    ctx.fillStyle = "rgba(220,38,38,.9)"; ctx.beginPath(); ctx.arc(b.x, b.y - 58, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px system-ui"; ctx.textAlign = "center"; ctx.fillText("X", b.x, b.y - 52);
+    drawCapyCanvas(ctx, b.x, b.y, uid, (b.name || "Xác") + " (xác)", false, true, false, false);
   });
-  // Characters
   const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
   players.forEach((p) => {
-    const pos = movePositions[p.uid]; if (!pos) return;
+    const pos = movePositions[p.uid]; if (!pos || pos.area !== currentAreaId) return;
     const moving = p.uid === myUid && (keysDown["w"] || keysDown["a"] || keysDown["s"] || keysDown["d"] || joyVec.x !== 0 || joyVec.y !== 0);
-    drawCapyCanvas(ctx, pos.x - camX, pos.y - camY, p.uid, p.name, !!p.isBot, p.alive === false, p.uid === myUid, moving);
+    drawCapyCanvas(ctx, pos.x, pos.y, p.uid, p.name, !!p.isBot, p.alive === false, p.uid === myUid, moving);
   });
-  // Lights-off sabotage: innocents see only a small circle around themselves; ducks see normally.
   const sabNow = sabotageActive();
   if (sabNow && sabNow.type === "lights" && myPrivate.role !== "culprit" && myPrivate.role !== "accomplice" && myPos) {
     ctx.fillStyle = "rgba(0,0,0,.82)";
     ctx.beginPath(); ctx.rect(0, 0, VIEW_W, VIEW_H);
-    const px = myPos.x - camX, py = myPos.y - camY;
-    ctx.arc(px, py, 130, 0, Math.PI * 2, true);
+    ctx.arc(myPos.x, myPos.y, 130, 0, Math.PI * 2, true);
     ctx.fill("evenodd");
   }
-  // Sabotage banner (drawn as DOM status below, plus canvas label)
   if (sabNow) {
     ctx.font = "bold 20px system-ui"; ctx.fillStyle = sabNow.type === "lights" ? "#facc15" : "#fca5a5"; ctx.textAlign = "center";
     ctx.fillText(sabNow.type === "lights" ? "⚠️ ĐÈN ĐÃ TẮT — chỉ nhìn gần được" : "🔒 CỬA ĐÃ KHÓA — không qua được cửa", VIEW_W / 2, 30);
@@ -516,8 +473,14 @@ function drawMovement() {
   if (nearObj && btn) {
     show("traceActionBtn", true);
     btn.textContent = myPrivate.role === "culprit" ? `🕵️ Giấu dấu vết ở ${nearObj.name}` : `🔍 Xem ${nearObj.name}`;
-    $("moveStatus").textContent = `Bạn đang ở gần ${nearObj.name} (${nearObj.room}). Bấm nút góc phải để xem — có thể có dấu vết, cũng có thể không có gì.`;
+    $("moveStatus").textContent = `Bạn đang ở ${area.loc} — ${area.name}, gần ${nearObj.name}. Bấm nút góc phải để xem — có thể có dấu vết, cũng có thể không có gì. Bấm "🚪 Cửa ra" để sang khu vực khác.`;
   } else if (btn) { show("traceActionBtn", false); }
+  const doorBtn = $("doorBtn");
+  if (doorBtn) {
+    const sab = sabotageActive();
+    doorBtn.disabled = !!(sab && sab.type === "doors");
+    doorBtn.textContent = doorBtn.disabled ? "🔒 Cửa đã khóa (20s)" : "🚪 Cửa ra — chọn khu vực khác";
+  }
 }
 function moveTick(ts) {
   if (!moveLoopOn) return;
@@ -549,23 +512,8 @@ function startMovement() {
 function startBotWander() {
   if (botWanderOn || !db || !roomCode) return;
   botWanderOn = true;
-  const regionOf = (x, y) => (y < 550 ? "top" : (y <= 700 ? "corridor" : "bottom"));
-  const topDoorX = (x) => (x < 800 ? 350 : (x < 1500 ? 1050 : 1750));
-  const botDoorX = (x) => (x < 700 ? 350 : (x < 1350 ? 1050 : 1750));
-  const pathFor = (cur, target) => {
-    const r1 = regionOf(cur.x, cur.y), r2 = regionOf(target.x, target.y);
-    if (r1 === r2) return [target];
-    if (r1 === "top" && r2 === "corridor") { const dx = topDoorX(cur.x); return [{ x: dx, y: 500 }, { x: dx, y: 625 }, target]; }
-    if (r1 === "corridor" && r2 === "top") { const dx = topDoorX(target.x); return [{ x: dx, y: 625 }, { x: dx, y: 500 }, target]; }
-    if (r1 === "bottom" && r2 === "corridor") { const dx = botDoorX(cur.x); return [{ x: dx, y: 750 }, { x: dx, y: 625 }, target]; }
-    if (r1 === "corridor" && r2 === "bottom") { const dx = botDoorX(target.x); return [{ x: dx, y: 625 }, { x: dx, y: 750 }, target]; }
-    if (r1 === "top" && r2 === "bottom") { const d1 = topDoorX(cur.x), d2 = botDoorX(target.x); return [{ x: d1, y: 500 }, { x: d1, y: 625 }, { x: d2, y: 625 }, { x: d2, y: 750 }, target]; }
-    if (r1 === "bottom" && r2 === "top") { const d1 = botDoorX(cur.x), d2 = topDoorX(target.x); return [{ x: d1, y: 750 }, { x: d1, y: 625 }, { x: d2, y: 625 }, { x: d2, y: 500 }, target]; }
-    return [target];
-  };
   setInterval(async () => {
     if (!isHost || publicState.phase !== "investigation" || !publicState.botFill) return;
-    // Bots do tasks slowly: an alive innocent bot completes one incomplete task every ~30s. Duck bots never count.
     if (Date.now() - botTaskAt > 30000) {
       botTaskAt = Date.now();
       try {
@@ -582,57 +530,25 @@ function startBotWander() {
     const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
     const bots = players.filter((p) => p.isBot && p.alive !== false);
     for (const b of bots) {
-      const cur = movePositions[b.uid] || { x: 400, y: 625 };
-      if (!botTargets[b.uid] || !botTargets[b.uid].length) {
-        const spots = [{ x: 400, y: 625 }, { x: 1000, y: 625 }, { x: 1600, y: 625 }, { x: 400, y: 275 }, { x: 1150, y: 275 }, { x: 1750, y: 275 }, { x: 350, y: 900 }, { x: 1000, y: 900 }, { x: 1650, y: 900 }];
-        const target = spots[Math.floor(Math.random() * spots.length)];
-        botTargets[b.uid] = pathFor(cur, target);
+      const cur = movePositions[b.uid] || { x: 480, y: 400, area: "phong-khach" };
+      const curArea = cur.area || "phong-khach";
+      // Occasionally walk through a door to a different area (separate screen).
+      if (Math.random() < 0.08) {
+        const na = AREAS[Math.floor(Math.random() * AREAS.length)];
+        await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: 480, y: 400, area: na.id }).catch(() => {});
+        continue;
       }
-      const wp = botTargets[b.uid][0];
+      if (!botTargets[b.uid] || botTargets[b.uid].area !== curArea) {
+        botTargets[b.uid] = { area: curArea, x: 120 + Math.random() * 720, y: 140 + Math.random() * 300 };
+      }
+      const wp = botTargets[b.uid];
       const d = Math.hypot(wp.x - cur.x, wp.y - cur.y) || 1;
-      if (d < 60) { botTargets[b.uid].shift(); continue; }
-      let nx = cur.x + (wp.x - cur.x) / d * 55, ny = cur.y + (wp.y - cur.y) / d * 55;
-      const blocked = WALLS.some((w) => nx + 20 > w.x && nx - 20 < w.x + w.w && ny + 20 > w.y && ny - 20 < w.y + w.h);
-      if (blocked) { botTargets[b.uid] = pathFor(cur, { x: 1000, y: 625 }); continue; }
-      await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: Math.round(Math.max(24, Math.min(WORLD_W - 24, nx))), y: Math.round(Math.max(24, Math.min(WORLD_H - 24, ny))) }).catch(() => {});
+      if (d < 60) { botTargets[b.uid] = null; continue; }
+      const nx = cur.x + (wp.x - cur.x) / d * 55, ny = cur.y + (wp.y - cur.y) / d * 55;
+      await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: Math.round(Math.max(40, Math.min(920, nx))), y: Math.round(Math.max(60, Math.min(500, ny))), area: curArea }).catch(() => {});
     }
   }, 1000);
 }
-
-// ---------- Firebase setup / placeholder guard ----------
-const cfg = window.__FIREBASE_CONFIG__ || {};
-const isPlaceholder = !cfg.apiKey || String(cfg.apiKey).includes("PLACEHOLDER")
-  || !cfg.databaseURL || String(cfg.databaseURL).includes("PLACEHOLDER");
-
-let db = null;
-let auth = null;
-let myUid = null;
-let myName = "";
-let roomCode = "";
-let isHost = false;
-let hostUid = "";
-let myPrivate = {};
-let publicState = {};
-let myVote = null;
-
-if (isPlaceholder) {
-  show("configWarn", true);
-  $("createBtn").disabled = true;
-  $("joinBtn").disabled = true;
-  $("lobbyStatus").textContent = "Chưa có config Firebase thật nên chưa tạo / vào phòng được. Xem README.md để cấu hình.";
-} else {
-  const app = initializeApp(cfg);
-  auth = getAuth(app);
-  db = getDatabase(app);
-  onAuthStateChanged(auth, (user) => {
-    if (user) myUid = user.uid;
-  });
-  signInAnonymously(auth).catch((err) => {
-    $("lobbyStatus").textContent = `Không đăng nhập ẩn danh được: ${err.message}. Hãy kiểm tra Anonymous Auth đã bật trong Firebase chưa (xem README.md).`;
-  });
-}
-
-// ---------- Room helpers ----------
 function publicRef() { return ref(db, `rooms/${roomCode}/public`); }
 function myPrivateRef() { return ref(db, `rooms/${roomCode}/private/${myUid}`); }
 function playerName(uid) { return (publicState.players && publicState.players[uid] && publicState.players[uid].name) || uid; }
@@ -964,7 +880,7 @@ function updateVoiceVolumes() {
     } else if (phase === "investigation") {
       const me = movePositions[myUid];
       const other = movePositions[uid];
-      vol = (me && other) ? proximityVolume(Math.hypot(me.x - other.x, me.y - other.y)) : 0.5;
+      vol = (me && other && other.area === me.area) ? proximityVolume(Math.hypot(me.x - other.x, me.y - other.y)) : 0;
     } else {
       vol = 1; // Lobby / meeting / vote / reveal: full volume.
     }
@@ -1421,7 +1337,7 @@ $("killBtn").addEventListener("click", async () => {
   const victim = near.player;
   const pos = movePositions[victim.uid] || myPos;
   await update(ref(db, `rooms/${roomCode}/public/players/${victim.uid}`), { alive: false }).catch(() => {});
-  await set(ref(db, `rooms/${roomCode}/public/bodies/${victim.uid}`), { x: Math.round(pos.x), y: Math.round(pos.y), name: victim.name }).catch(() => {});
+  await set(ref(db, `rooms/${roomCode}/public/bodies/${victim.uid}`), { x: Math.round(pos.x), y: Math.round(pos.y), name: victim.name, area: currentAreaId }).catch(() => {});
   $("moveStatus").textContent = `Bạn đã loại ${victim.name} (trong cốt truyện). Xác còn nằm trên bản đồ — cẩn thận người khác báo xác!`;
 });
 $("reportBtn").addEventListener("click", async () => {
@@ -1534,3 +1450,28 @@ $("newGameBtn").addEventListener("click", () => {
   // Ván mới = phòng mới, để mã phòng cũ không bị lẫn vai trò cũ.
   window.location.reload();
 });
+
+// ---------- Area picker (trial): door -> list of locations/areas, inside game frame ----------
+function renderAreaPicker() {
+  const el = $("areaPickerList"); if (!el) return;
+  const byLoc = {};
+  AREAS.forEach((a) => { (byLoc[a.loc] = byLoc[a.loc] || []).push(a); });
+  el.innerHTML = Object.entries(byLoc).map(([loc, arr]) => `
+    <div style="margin:8px 0"><strong>${loc}</strong><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+    ${arr.map((a) => `<button type="button" class="area-pick-btn" data-area="${a.id}" style="width:auto;margin:0;padding:10px 12px;background:${a.id === currentAreaId ? '#16a34a' : '#6366f1'}">${a.name}${a.id === currentAreaId ? ' (đang ở đây)' : ''}</button>`).join("")}
+    </div></div>`).join("");
+  el.querySelectorAll(".area-pick-btn").forEach((btn) => btn.addEventListener("click", () => {
+    currentAreaId = btn.getAttribute("data-area");
+    myPos = { x: 480, y: 400 };
+    syncPos(true);
+    show("areaPicker", false);
+    $("moveStatus").textContent = `Bạn đã vào ${currentArea().loc} — ${currentArea().name}.`;
+  }));
+}
+if ($("doorBtn")) $("doorBtn").addEventListener("click", () => {
+  const sab = sabotageActive();
+  if (sab && sab.type === "doors") return;
+  renderAreaPicker();
+  show("areaPicker", true);
+});
+if ($("areaPickerCloseBtn")) $("areaPickerCloseBtn").addEventListener("click", () => show("areaPicker", false));
