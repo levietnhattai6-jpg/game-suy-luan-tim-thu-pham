@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Game Suy Luận — Tìm Thủ Phạm</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #101828; color: #f2f4f7; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 16px 14px 40px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  h2 { font-size: 18px; margin: 18px 0 8px; }
+  h3 { font-size: 16px; margin: 14px 0 6px; }
+  p, li { line-height: 1.55; font-size: 15px; }
+  .sub { color: #d0d5dd; }
+  .card { background: #1d2939; border: 1px solid #344054; border-radius: 14px; padding: 14px; margin: 12px 0; }
+  .warn { background: #422006; border-color: #b54708; }
+  .secret { background: #2a1a3d; border-color: #7a5af8; }
+  .clue { background: #122b22; border-color: #027a48; }
+  label { display: block; font-size: 14px; margin: 10px 0 4px; color: #d0d5dd; }
+  input, select, textarea { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #475467; background: #0f172a; color: #fff; font-size: 16px; }
+  button { width: 100%; padding: 12px; margin-top: 10px; border: 0; border-radius: 10px; background: #dc6803; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button.secondary { background: #344054; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; }
+  .row button { flex: 1; }
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #344054; font-size: 13px; margin: 2px; }
+  .pill.me { background: #dc6803; }
+  .msg { white-space: pre-line; }
+  .chatbox { max-height: 220px; overflow: auto; border: 1px solid #344054; border-radius: 10px; padding: 10px; background: #0f172a; }
+  .chatline { margin: 6px 0; font-size: 14px; }
+  .small { font-size: 13px; color: #d0d5dd; }
+  .hidden { display: none !important; }
+  .vote-btn { text-align: left; background: #1d2939; border: 1px solid #475467; color: #fff; }
+  .vote-btn.selected { border-color: #dc6803; background: #422006; }
+</style>
+<script>
+  // Firebase config for project game-d76d1, wired from the user's Firebase
+  // web app registration. This is a Firebase web config, meant to be public
+  // in deployed client code; real security is in Realtime Database Rules.
+  window.__FIREBASE_CONFIG__ = {
+    apiKey: "AIzaSyBJkz75AHIdj9ABZ46HK8saeEgeTSCmUk",
+    authDomain: "game-d76d1.firebaseapp.com",
+    projectId: "game-d76d1",
+    storageBucket: "game-d76d1.firebasestorage.app",
+    messagingSenderId: "99323746873",
+    appId: "1:99323746873:web:098b0e43ed8e2fd9754be8",
+    databaseURL: "https://game-d76d1-default-rtdb.asia-southeast1.firebasedatabase.app"
+  };
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
+  <p class="sub">Game trí tuệ cho nhóm 5–10 người. Một người nhận nhiệm vụ bí mật, cả nhóm điều tra và bỏ phiếu tìm thủ phạm.</p>
+
+  <div id="configWarn" class="card warn hidden">
+    <strong>Chưa cấu hình Firebase.</strong>
+    <p class="msg">Đây là bản chuẩn bị code, chưa chơi chung thật được. Cần tạo dự án Firebase miễn phí (gói Spark), bật Anonymous Auth, tạo Realtime Database, rồi thay các giá trị PLACEHOLDER trong <code>window.__FIREBASE_CONFIG__</code> ở đầu file <code>index.html</code> bằng config thật. Hướng dẫn chi tiết trong <code>README.md</code>. Các nút tạo / vào phòng đang tạm khóa cho tới khi có config thật.</p>
+  </div>
+
+  <div class="card">
+    <h2>Luật chơi — đọc trước khi chơi</h2>
+    <ul>
+      <li>Nhóm 5–10 người, chung 1 phòng bằng mã phòng 4 ký tự. Chủ phòng tạo phòng, người khác nhập mã + tên để vào.</li>
+      <li>Khi bắt đầu, hệ thống chọn ngẫu nhiên <strong>1 thủ phạm</strong> và giao cho thủ phạm <strong>1 nhiệm vụ bí mật ngẫu nhiên</strong>: phá phách, trộm cắp, hoặc loại một người chơi (trong cốt truyện, không có hình ảnh bạo lực).</li>
+      <li>Hiện trường để lại <strong>2 manh mối</strong> cho mọi người cùng xem. Manh mối hợp lý, không nêu trực tiếp tên thủ phạm.</li>
+      <li>Thủ phạm có thể <strong>mời riêng đúng 1 người</strong> làm đồng bọn. Người được mời tự chọn đồng ý hoặc từ chối, riêng tư. Nếu đồng ý, chỉ thủ phạm và đồng bọn biết nhau. Người chơi khác <strong>không biết đồng bọn là ai</strong>.</li>
+      <li>Điều tra: mọi người xem manh mối và trò chuyện trong game để suy luận.</li>
+      <li>Bỏ phiếu: mỗi người bỏ phiếu cho 1 nghi phạm. Người bị nhiều phiếu nhất là người bị tố cáo.</li>
+      <li><strong>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</strong></li>
+      <li><strong>Luật thắng — quan trọng nhất: CHỈ khi người bị tố cáo đúng là thủ phạm thì phe người chơi vô tội mới thắng. Nếu người bị tố cáo là đồng bọn HOẶC là người vô tội thì phe thủ phạm (thủ phạm + đồng bọn nếu có) thắng.</strong> Sau đó game công bố toàn bộ vai trò, nhiệm vụ và đồng bọn.</li>
+      <li>Không quảng cáo, không tiền thật, không giải thưởng.</li>
+    </ul>
+  </div>
+
+  <!-- LOBBY / JOIN -->
+  <div id="lobbyCard" class="card">
+    <h2>1. Vào phòng</h2>
+    <label for="playerName">Tên của bạn</label>
+    <input id="playerName" maxlength="30" placeholder="Ví dụ: An, Bình, Chi…">
+    <div class="row">
+      <button id="createBtn">Tạo phòng mới</button>
+      <button id="joinBtn" class="secondary">Vào phòng có sẵn</button>
+    </div>
+    <label for="roomCodeInput">Mã phòng (4 ký tự, chỉ khi vào phòng có sẵn)</label>
+    <input id="roomCodeInput" maxlength="4" placeholder="Ví dụ: A3K7" style="text-transform: uppercase;">
+    <p id="lobbyStatus" class="small msg"></p>
+  </div>
+
+  <!-- ROOM -->
+  <div id="roomCard" class="card hidden">
+    <h2>Phòng <span id="roomCodeLabel"></span></h2>
+    <p>Giai đoạn: <strong id="phaseLabel"></strong> · Bạn là: <strong id="myNameLabel"></strong></p>
+    <p id="playerCountLabel" class="small"></p>
+    <div id="playerList"></div>
+    <button id="startBtn" class="hidden">Bắt đầu ván chơi (cần từ 5 người)</button>
+    <p id="roomStatus" class="small msg"></p>
+  </div>
+
+  <!-- SECRET PHASE -->
+  <div id="secretCard" class="card secret hidden">
+    <h2>2. Nhiệm vụ bí mật</h2>
+    <div id="secretForOthers">
+      <p>Đang chờ thủ phạm nhận nhiệm vụ và (nếu muốn) mời đồng bọn…</p>
+      <p id="secretReadyLabel" class="small"></p>
+    </div>
+    <div id="secretForCulprit" class="hidden">
+      <p><strong>Bạn là thủ phạm. Chỉ bạn thấy phần này.</strong></p>
+      <p id="myMissionLabel" class="msg"></p>
+      <label for="accompliceSelect">Mời riêng 1 người làm đồng bọn (không bắt buộc, chỉ mời được 1 lần)</label>
+      <select id="accompliceSelect"></select>
+      <button id="inviteBtn">Gửi lời mời riêng</button>
+      <p id="inviteStatus" class="small msg"></p>
+      <button id="culpritReadyBtn" class="secondary">Tôi đã sẵn sàng → chuyển sang điều tra (chủ phòng sẽ bấm chuyển giai đoạn)</button>
+    </div>
+    <div id="inviteCard" class="hidden">
+      <p><strong>Bạn nhận được lời mời riêng, chỉ bạn thấy phần này.</strong></p>
+      <p id="inviteFromLabel" class="msg"></p>
+      <div class="row">
+        <button id="acceptInviteBtn">Đồng ý làm đồng bọn</button>
+        <button id="declineInviteBtn" class="secondary">Từ chối</button>
+      </div>
+      <p id="inviteDecisionLabel" class="small msg"></p>
+    </div>
+    <div id="accompliceCard" class="hidden">
+      <p><strong>Bạn là đồng bọn. Chỉ bạn và thủ phạm biết điều này.</strong></p>
+      <p id="accompliceLabel" class="msg"></p>
+    </div>
+    <button id="toInvestigationBtn" class="hidden">Chủ phòng: chuyển sang điều tra</button>
+  </div>
+
+  <!-- INVESTIGATION -->
+  <div id="investigationCard" class="card hidden">
+    <h2>3. Điều tra hiện trường</h2>
+    <p id="sceneLabel" class="msg"></p>
+    <div id="clueList"></div>
+    <h3>Trò chuyện trong game</h3>
+    <div id="chatBox" class="chatbox"></div>
+    <label for="chatInput">Nhắn cho cả phòng (không nhắn vai trò bí mật của bạn)</label>
+    <input id="chatInput" maxlength="200" placeholder="Bạn thấy manh mối nào đáng ngờ?">
+    <button id="sendChatBtn" class="secondary">Gửi tin nhắn</button>
+    <button id="toVoteBtn" class="hidden">Chủ phòng: chuyển sang bỏ phiếu</button>
+  </div>
+
+  <!-- VOTE -->
+  <div id="voteCard" class="card hidden">
+    <h2>4. Bỏ phiếu tìm thủ phạm</h2>
+    <p>Chọn <strong>1 người</strong> bạn cho là thủ phạm. Nhớ luật: chỉ tố cáo đúng thủ phạm thì phe vô tội mới thắng. Tố cáo trúng đồng bọn cũng tính là phe thủ phạm thắng.</p>
+    <p>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</p>
+    <div id="voteList"></div>
+    <p id="voteStatus" class="small msg"></p>
+    <button id="revealBtn" class="hidden">Chủ phòng: công bố kết quả</button>
+  </div>
+
+  <!-- REVEAL -->
+  <div id="revealCard" class="card hidden">
+    <h2>5. Kết quả</h2>
+    <p id="resultLabel" class="msg"></p>
+    <p id="revealDetailLabel" class="msg"></p>
+    <p id="voteBreakdownLabel" class="msg"></p>
+    <button id="newGameBtn" class="secondary">Chơi ván mới (chủ phòng tạo phòng mới)</button>
+  </div>
+
+  <p class="small">Bản v1 chuẩn bị: code + tài liệu, chưa deploy, chưa push GitHub. Cần dự án Firebase thật và GitHub Pages mới chơi chung nhiều máy được. Xem README.md.</p>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
