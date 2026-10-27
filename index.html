@@ -7,7 +7,18 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: linear-gradient(180deg, #1e1b4b 0%, #312e81 45%, #0f172a 100%); color: #1f2937; min-height: 100vh; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 16px 14px 40px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 14px 40px; }
+  /* Whole game is landscape-first: wide wrap, side-by-side panels on wide screens */
+  #rotateBanner { display: none; }
+  @media (orientation: portrait) { #rotateBanner { display: block; } }
+  @media (min-width: 800px) {
+    .vote-grid { grid-template-columns: repeat(4, 1fr); }
+    .move-side { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    .move-side .notebook, .move-side .chat-col { margin-top: 0; }
+    .room-wide { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; align-items: start; }
+  }
+  .move-hud { background: #1e293b; color: #fff; border: 3px solid #111827; border-radius: 14px; padding: 10px 12px; font-weight: 800; }
+  .move-hud .small { color: #e2e8f0; }
   h1 { font-size: 26px; margin: 6px 0 4px; color: #fff; text-shadow: 0 2px 0 #7c2d12; letter-spacing: .2px; }
   h2 { font-size: 19px; margin: 14px 0 8px; color: #312e81; }
   h3 { font-size: 16px; margin: 14px 0 6px; color: #312e81; }
@@ -71,7 +82,11 @@
   .joy-base { position: absolute; left: 14px; bottom: 14px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.35); border: 3px solid rgba(255,255,255,.8); touch-action: none; }
   .joy-knob { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%; background: #ff6b35; border: 3px solid #7c2d12; }
   .move-action { position: absolute; right: 14px; bottom: 14px; width: auto; min-width: 150px; padding: 12px 14px; font-size: 15px; }
-  .notebook { background: #fffbeb; border: 2px solid #d97706; border-radius: 14px; padding: 10px; }
+  .notebook { background: linear-gradient(180deg,#fffbeb,#fef3c7); border: 2px solid #d97706; border-radius: 14px; padding: 10px; box-shadow: 0 4px 0 rgba(180,83,9,.25); }
+  .card { box-shadow: 0 8px 0 rgba(0,0,0,.25), 0 14px 28px rgba(0,0,0,.18); }
+  h1 { background: linear-gradient(90deg,#fde68a,#fca5a5,#c4b5fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .move-stage { box-shadow: 0 10px 24px rgba(0,0,0,.45); }
+  #moveCanvas { image-rendering: auto; }
   .notebook li { font-size: 14px; margin: 4px 0; }
 </style>
 <script>
@@ -91,12 +106,12 @@
 </head>
 <body>
 <div class="wrap">
+  <p id="rotateBanner" class="landscape-banner">📱 Xoay ngang điện thoại để chơi — game này chơi ngang sẽ rộng và dễ nhìn hơn. Cầm dọc vẫn chơi được.</p>
   <div class="hero">
     <div class="hero-row" aria-hidden="true">
-      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#e63b3b" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
-      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#2f7de1" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><path d="M38 18 Q50 2 62 18" fill="#facc15" stroke="#111827" stroke-width="3"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
-      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#2fae5f" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><circle cx="50" cy="10" r="7" fill="#e86fb0" stroke="#111827" stroke-width="3"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
-      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#f2b705" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
+      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#8d6e63" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#8d6e63" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#8d6e63" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#d7ccc8" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="4" fill="#111827"/><circle cx="62" cy="42" r="4" fill="#111827"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><path d="M40 70 Q50 80 60 70" fill="none" stroke="#111827" stroke-width="3"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#5d4037"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#5d4037"/></svg>
+      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#a1887f" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#a1887f" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#a1887f" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#efebe9" stroke="#111827" stroke-width="2"/><path d="M34 42 L42 42 M58 42 L66 42" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><ellipse cx="50" cy="74" rx="8" ry="5" fill="#f48fb1" stroke="#111827" stroke-width="2"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#5d4037"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#5d4037"/></svg>
+      <svg viewBox="0 0 100 110"><ellipse cx="28" cy="28" rx="9" ry="11" fill="#795548" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="#795548" stroke="#111827" stroke-width="3"/><rect x="14" y="20" width="72" height="72" rx="30" fill="#795548" stroke="#111827" stroke-width="3"/><rect x="28" y="52" width="44" height="22" rx="11" fill="#d7ccc8" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="3" fill="#111827"/><circle cx="62" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="62" cy="42" r="3" fill="#111827"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/><ellipse cx="50" cy="74" rx="12" ry="7" fill="#111827" stroke="#111827" stroke-width="2"/><rect x="30" y="12" width="40" height="14" rx="7" fill="#facc15" stroke="#111827" stroke-width="2"/><rect x="22" y="84" width="22" height="10" rx="5" fill="#4e342e"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#4e342e"/></svg>
     </div>
     <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
   </div>
@@ -114,7 +129,7 @@
       <li>Khi bắt đầu, hệ thống chọn ngẫu nhiên <strong>1 thủ phạm</strong> và giao cho thủ phạm <strong>1 nhiệm vụ bí mật ngẫu nhiên</strong>: phá phách, trộm cắp, hoặc loại một người chơi (trong cốt truyện, không có hình ảnh bạo lực).</li>
       <li>Hiện trường để lại <strong>2 manh mối</strong> cho mọi người cùng xem. Manh mối hợp lý, không nêu trực tiếp tên thủ phạm.</li>
       <li>Thủ phạm có thể <strong>mời riêng đúng 1 người</strong> làm đồng bọn. Người được mời tự chọn đồng ý hoặc từ chối, riêng tư. Nếu đồng ý, chỉ thủ phạm và đồng bọn biết nhau. Người chơi khác <strong>không biết đồng bọn là ai</strong>.</li>
-      <li>Điều tra bằng di chuyển: mọi người điều khiển nhân vật đi lại trên bản đồ để tìm dấu vết. Ai tới gần dấu vết mới xem được manh mối. Tội phạm tới trước có thể lấy và giấu dấu vết đó đi.</li>
+      <li>Điều tra bằng di chuyển ngang: mọi người điều khiển nhân vật capybara đi lại trong ngôi nhà nhiều phòng để tìm dấu vết. Dấu vết KHÔNG nằm giữa đường — nó giấu trong đồ vật (tủ, giường, kệ sách, bồn tắm…). Sổ manh mối cho sẵn câu đố gợi ý từng dấu vết nằm ở đâu, bạn phải giải đố rồi đi tới đúng đồ vật đó mới xem được. Tội phạm tới trước có thể lấy và giấu dấu vết đó đi.</li>
       <li>Họp khẩn: bất kỳ ai cũng có thể bấm Họp khẩn trong lúc di chuyển để chuyển sang bỏ phiếu.</li>
       <li>Bỏ phiếu: mỗi người bỏ phiếu cho 1 nghi phạm. Người bị nhiều phiếu nhất là người bị tố cáo.</li>
       <li><strong>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</strong></li>
@@ -183,10 +198,11 @@
 
   <!-- INVESTIGATION = MOVEMENT PHASE (prototype) -->
   <div id="investigationCard" class="card hidden">
-    <h2>3. Di chuyển — tìm dấu vết</h2>
-    <p class="landscape-banner">📱 Xoay ngang điện thoại để chơi cho rộng. Cầm dọc vẫn chơi được, nhưng nhìn hẹp hơn.</p>
+    <h2>3. Di chuyển — tìm dấu vết (chơi ngang)</h2>
+    <p class="landscape-banner">📱 Xoay ngang điện thoại để chơi — game này chơi ngang sẽ rộng và dễ nhìn hơn. Cầm dọc vẫn chơi được.</p>
+    <div class="move-hud"><div id="roleHud">Bạn đang vào bản đồ…</div><div id="missionHud" class="small"></div></div>
     <p id="sceneLabel" class="msg"></p>
-    <p class="small">Điện thoại: dùng cần gạt ở góc trái bản đồ. Máy tính: phím WASD hoặc mũi tên. Đi tới gần dấu vết sáng vàng rồi bấm nút hành động ở góc phải.</p>
+    <p class="small">Điện thoại: dùng cần gạt ở góc trái bản đồ. Máy tính: phím WASD hoặc mũi tên. Dấu vết KHÔNG nằm giữa đường — nó giấu trong đồ vật. Đọc câu đố trong Sổ manh mối, đi tới đúng đồ vật, đứng gần rồi bấm nút hành động ở góc phải.</p>
     <div class="move-stage">
       <canvas id="moveCanvas" width="960" height="540"></canvas>
       <div id="joyBase" class="joy-base"><div id="joyKnob" class="joy-knob"></div></div>
@@ -194,16 +210,20 @@
     </div>
     <p id="moveStatus" class="small msg"></p>
     <button id="meetingBtn">🚨 Họp khẩn — chuyển sang bỏ phiếu</button>
+    <div class="move-side">
     <div class="notebook">
-      <strong>📓 Sổ manh mối của bạn</strong>
-      <ul id="notebookList"><li class="small">Chưa nhặt được dấu vết nào. Hãy đi tìm các dấu sáng vàng trên bản đồ.</li></ul>
+      <strong>📓 Sổ manh mối của bạn — câu đố gợi ý (đọc rồi đi tìm đúng đồ vật)</strong>
+      <ul id="notebookList"><li class="small">Đang tải câu đố…</li></ul>
     </div>
+    <div class="chat-col">
     <h3>Trò chuyện trong game</h3>
     <div id="chatBox" class="chatbox"></div>
     <div id="moveChatBox" class="chatbox hidden"></div>
     <label for="chatInput">Nhắn cho cả phòng (không nhắn vai trò bí mật của bạn)</label>
     <input id="chatInput" maxlength="200" placeholder="Bạn thấy manh mối nào đáng ngờ?">
     <button id="sendChatBtn" class="secondary">Gửi tin nhắn</button>
+    </div>
+    </div>
     <button id="toVoteBtn" class="hidden">Chủ phòng: chuyển sang bỏ phiếu</button>
   </div>
 

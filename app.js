@@ -17,24 +17,46 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
 }[c]));
 
 
-// ---------- Original cute bean characters (SVG, inspired by round bean style) ----------
-// No copied assets/logos/names: simple original round body + visor + hat variation.
-const CHAR_COLORS = ["#e63b3b", "#2f7de1", "#2fae5f", "#f2b705", "#e86fb0", "#f07d1a", "#8b5cf6", "#17b8c4", "#7cb342", "#ef6c00"];
+// ---------- Capybara characters (original SVG/canvas, no copied assets) ----------
+// Brown capybara with deterministic silly face by uid hash: same player keeps
+// the same fur, eyes, mouth and accessory across lobby, map, vote, reveal.
+const CAPY_FURS = ["#8d6e63", "#a1887f", "#795548", "#bcaaa4", "#6d4c41", "#9c7a5a"];
 function hashStr(s) { let h = 0; for (const ch of String(s ?? "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; }
-function colorFor(key) { return CHAR_COLORS[hashStr(key) % CHAR_COLORS.length]; }
-function beanSVG(key, ghost = false) {
-  const color = ghost ? "#94a3b8" : colorFor(key);
-  const v = hashStr(key) % 4;
-  let hat = "";
-  if (v === 1) hat = '<path d="M36 18 Q50 0 64 18" fill="#facc15" stroke="#111827" stroke-width="3"/>';
-  if (v === 2) hat = '<line x1="50" y1="18" x2="50" y2="6" stroke="#111827" stroke-width="3"/><circle cx="50" cy="6" r="6" fill="#e86fb0" stroke="#111827" stroke-width="2"/>';
-  if (v === 3) hat = '<path d="M38 20 L44 6 L50 16 L56 6 L62 20 Z" fill="#facc15" stroke="#111827" stroke-width="2"/>';
-  return `<svg viewBox="0 0 100 110" aria-hidden="true"><rect x="14" y="16" width="72" height="78" rx="34" fill="${color}" stroke="#111827" stroke-width="3"/>${hat}<ellipse cx="50" cy="48" rx="27" ry="17" fill="${ghost ? "#e2e8f0" : "#cfe8ff"}" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff" opacity=".9"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>`;
+function capyFace(key) {
+  const h = hashStr(key);
+  return { fur: CAPY_FURS[h % CAPY_FURS.length], eye: h % 5, mouth: (h >>> 3) % 4, acc: (h >>> 5) % 5 };
+}
+function colorFor(key) { return capyFace(key).fur; }
+function capyEyesSVG(eye) {
+  if (eye === 1) return '<path d="M32 38 L44 46 M44 38 L32 46 M56 38 L68 46 M68 38 L56 46" stroke="#111827" stroke-width="3" stroke-linecap="round"/>';
+  if (eye === 2) return '<path d="M32 44 Q38 36 44 44 M56 44 Q62 36 68 44" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="round"/>';
+  if (eye === 3) return '<circle cx="38" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="38" cy="42" r="3" fill="#111827"/><circle cx="62" cy="42" r="6" fill="#fff" stroke="#111827" stroke-width="2"/><circle cx="62" cy="42" r="3" fill="#111827"/>';
+  if (eye === 4) return '<path d="M32 38 L44 44 M56 44 L68 38" stroke="#111827" stroke-width="3" stroke-linecap="round"/><circle cx="38" cy="46" r="3" fill="#111827"/><circle cx="62" cy="46" r="3" fill="#111827"/>';
+  return '<circle cx="38" cy="42" r="4" fill="#111827"/><circle cx="62" cy="42" r="4" fill="#111827"/>';
+}
+function capyMouthSVG(mouth) {
+  if (mouth === 0) return '<path d="M42 68 Q50 74 58 68" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="round"/><ellipse cx="50" cy="75" rx="8" ry="5" fill="#f48fb1" stroke="#111827" stroke-width="2"/>';
+  if (mouth === 1) return '<path d="M36 68 Q50 82 64 68 Z" fill="#fff" stroke="#111827" stroke-width="2"/><path d="M36 68 Q50 82 64 68" fill="none" stroke="#111827" stroke-width="3"/>';
+  if (mouth === 2) return '<ellipse cx="50" cy="71" rx="13" ry="9" fill="#5d4037" stroke="#111827" stroke-width="2"/><ellipse cx="50" cy="74" rx="7" ry="4" fill="#f48fb1"/>';
+  return '<circle cx="50" cy="70" r="5" fill="none" stroke="#111827" stroke-width="3"/>';
+}
+function capyAccSVG(acc) {
+  if (acc === 1) return '<rect x="28" y="34" width="20" height="12" rx="4" fill="#111827"/><rect x="52" y="34" width="20" height="12" rx="4" fill="#111827"/><rect x="48" y="39" width="4" height="3" fill="#111827"/>';
+  if (acc === 2) return '<path d="M28 26 Q50 6 72 26 L72 20 Q50 2 28 20 Z" fill="#2f7de1" stroke="#111827" stroke-width="2"/><rect x="22" y="24" width="56" height="6" rx="3" fill="#1d4ed8" stroke="#111827" stroke-width="2"/>';
+  if (acc === 3) return '<circle cx="74" cy="18" r="5" fill="#f9a8d4" stroke="#111827" stroke-width="1.5"/><circle cx="74" cy="18" r="2" fill="#facc15"/>';
+  if (acc === 4) return '<rect x="24" y="24" width="52" height="8" rx="4" fill="#ef4444" stroke="#111827" stroke-width="2"/>';
+  return "";
+}
+function capySVG(key, ghost = false) {
+  const f = capyFace(key);
+  const fur = ghost ? "#94a3b8" : f.fur;
+  const snout = ghost ? "#e2e8f0" : "#d7ccc8";
+  return `<svg viewBox="0 0 100 110" aria-hidden="true"><ellipse cx="28" cy="28" rx="9" ry="11" fill="${fur}" stroke="#111827" stroke-width="3"/><ellipse cx="72" cy="28" rx="9" ry="11" fill="${fur}" stroke="#111827" stroke-width="3"/><ellipse cx="28" cy="28" rx="4" ry="6" fill="#5d4037" opacity=".5"/><ellipse cx="72" cy="28" rx="4" ry="6" fill="#5d4037" opacity=".5"/><rect x="14" y="20" width="72" height="72" rx="30" fill="${fur}" stroke="#111827" stroke-width="3"/><ellipse cx="36" cy="30" rx="16" ry="9" fill="#fff" opacity=".18"/><rect x="28" y="52" width="44" height="22" rx="11" fill="${snout}" stroke="#111827" stroke-width="2"/><ellipse cx="50" cy="62" rx="6" ry="4" fill="#111827"/>${ghost ? "" : capyEyesSVG(f.eye)}${ghost ? "" : capyMouthSVG(f.mouth)}${ghost ? "" : capyAccSVG(f.acc)}<rect x="22" y="84" width="22" height="10" rx="5" fill="#5d4037"/><rect x="56" y="84" width="22" height="10" rx="5" fill="#5d4037"/></svg>`;
 }
 function sceneSVG(typeLabel) {
   if (typeLabel === "Trộm cắp") return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#fef3c7"/><rect x="40" y="50" width="200" height="110" fill="#a16207" stroke="#111827" stroke-width="3"/><rect x="60" y="70" width="160" height="70" fill="#fde68a" stroke="#111827" stroke-width="2"/><rect x="100" y="95" width="80" height="45" fill="none" stroke="#dc2626" stroke-width="3" stroke-dasharray="8 6"/><text x="140" y="122" text-anchor="middle" font-size="20" font-weight="800" fill="#991b1b">TRỐNG!</text><rect x="300" y="60" width="150" height="100" fill="#fff" stroke="#111827" stroke-width="3"/><line x1="310" y1="70" x2="440" y2="150" stroke="#dc2626" stroke-width="4"/><text x="375" y="185" text-anchor="middle" font-size="18" font-weight="800" fill="#111827">Ngăn kéo bị mở</text></svg>`;
-  if (typeLabel === "Loại một người chơi") return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#e0e7ff"/><ellipse cx="120" cy="180" rx="90" ry="12" fill="#c7d2fe"/><rect x="90" y="80" width="70" height="70" rx="10" fill="#94a3b8" stroke="#111827" stroke-width="3" transform="rotate(-18 125 115)"/><rect x="70" y="150" width="14" height="40" fill="#64748b"/><ellipse cx="220" cy="185" rx="14" ry="7" fill="#475569"/><ellipse cx="270" cy="180" rx="14" ry="7" fill="#475569"/><ellipse cx="320" cy="175" rx="14" ry="7" fill="#475569"/><text x="380" y="90" font-size="20" font-weight="800" fill="#312e81">Ghế đổ…</text><text x="380" y="118" font-size="20" font-weight="800" fill="#312e81">người đâu rồi?</text></svg>`;
-  return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#dbeafe"/><rect x="60" y="60" width="180" height="110" rx="12" fill="#1e293b" stroke="#111827" stroke-width="3"/><rect x="80" y="80" width="140" height="70" fill="#93c5fd"/><path d="M150 80 L170 110 L190 80" fill="none" stroke="#dc2626" stroke-width="4"/><text x="150" y="185" text-anchor="middle" font-size="18" font-weight="800" fill="#111827">Màn hình nứt!</text><path d="M300 50 L315 75 L330 50 L345 75" fill="#facc15" stroke="#111827" stroke-width="2"/><text x="320" y="130" font-size="20" font-weight="800" fill="#111827">Có dấu vết lạ</text><text x="320" y="158" font-size="20" font-weight="800" fill="#111827">ở hiện trường</text></svg>`;
+  if (typeLabel === "Loại một người chơi") return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#e0e7ff"/><ellipse cx="120" cy="180" rx="90" ry="12" fill="#c7d2fe"/><rect x="90" y="80" width="70" height="70" rx="10" fill="#94a3b8" stroke="#111827" stroke-width="3" transform="rotate(-18 125 115)"/><text x="380" y="90" font-size="20" font-weight="800" fill="#312e81">Ghế đổ…</text><text x="380" y="118" font-size="20" font-weight="800" fill="#312e81">người đâu rồi?</text></svg>`;
+  return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#dbeafe"/><rect x="60" y="60" width="180" height="110" rx="12" fill="#1e293b" stroke="#111827" stroke-width="3"/><rect x="80" y="80" width="140" height="70" fill="#93c5fd"/><path d="M150 80 L170 110 L190 80" fill="none" stroke="#dc2626" stroke-width="4"/><text x="150" y="185" text-anchor="middle" font-size="18" font-weight="800" fill="#111827">Màn hình nứt!</text></svg>`;
 }
 function clueIcon(typeLabel, i) {
   if (typeLabel === "Trộm cắp") return i === 0 ? "🔑" : "🧵";
@@ -142,25 +164,70 @@ function tallyVotes(votes) {
   return { counts, top, leaders, tie: leaders.length > 1, accusedUid: leaders.length === 1 ? leaders[0] : null };
 }
 
-// ---------- Movement prototype ----------
-// World 1600x900, viewport canvas 960x540, camera follows local player.
-// No wall collision in prototype, only world bounds. Positions sync at
-// ~10/sec to rooms/{code}/public/positions/{uid}.
-const WORLD_W = 1600, WORLD_H = 900, VIEW_W = 960, VIEW_H = 540;
+// ---------- Movement: house map, hidden traces, riddles ----------
+// World 2000x1100, viewport canvas 960x540, camera follows local player.
+// Rooms separated by walls with door gaps; simple axis-separated collision.
+// Traces are HIDDEN inside furniture objects (no glowing markers in open
+// space). Every object gets a faint outline; the object near the player gets
+// a soft glow — the glow does NOT say whether it hides a trace.
+const WORLD_W = 2000, WORLD_H = 1100, VIEW_W = 960, VIEW_H = 540;
 const MAP_ZONES = [
-  { name: "Vườn", x: 0, y: 0, w: 600, h: 450, color: "#7ec850" },
-  { name: "Sân sau", x: 600, y: 0, w: 1000, h: 450, color: "#f2d492" },
-  { name: "Phòng khách", x: 0, y: 450, w: 700, h: 450, color: "#f7a8b8" },
-  { name: "Bếp", x: 700, y: 450, w: 500, h: 450, color: "#a8d8ea" },
-  { name: "Hành lang", x: 1200, y: 450, w: 400, h: 450, color: "#d8c7a8" },
+  { name: "Phòng khách", x: 0, y: 0, w: 800, h: 550, color: "#f5d0a9", floor2: "#eec39a" },
+  { name: "Bếp", x: 800, y: 0, w: 700, h: 550, color: "#bfe3dd", floor2: "#aed8d1" },
+  { name: "Kho", x: 1500, y: 0, w: 500, h: 550, color: "#d9c7a5", floor2: "#cdbb93" },
+  { name: "Hành lang", x: 0, y: 550, w: 2000, h: 150, color: "#e8dcc3", floor2: "#ddd0b2" },
+  { name: "Phòng ngủ", x: 0, y: 700, w: 700, h: 400, color: "#d6c6f0", floor2: "#c9b6ea" },
+  { name: "Thư viện", x: 700, y: 700, w: 650, h: 400, color: "#c9b18c", floor2: "#bda07a" },
+  { name: "Phòng tắm", x: 1350, y: 700, w: 650, h: 400, color: "#bcd9f7", floor2: "#aad0f2" },
 ];
-const TRACE_SPOTS = [
-  { x: 200, y: 200 }, { x: 820, y: 170 }, { x: 1350, y: 260 },
-  { x: 300, y: 680 }, { x: 920, y: 720 }, { x: 1420, y: 660 },
+// Walls: thickness 12, split so door gaps remain open.
+const WALLS = [
+  { x: 800, y: 0, w: 12, h: 200 }, { x: 800, y: 300, w: 12, h: 250 },
+  { x: 1500, y: 0, w: 12, h: 200 }, { x: 1500, y: 300, w: 12, h: 250 },
+  { x: 0, y: 550, w: 300, h: 12 }, { x: 400, y: 550, w: 600, h: 12 }, { x: 1100, y: 550, w: 600, h: 12 }, { x: 1800, y: 550, w: 200, h: 12 },
+  { x: 0, y: 700, w: 300, h: 12 }, { x: 400, y: 700, w: 600, h: 12 }, { x: 1100, y: 700, w: 600, h: 12 }, { x: 1800, y: 700, w: 200, h: 12 },
+  { x: 700, y: 700, w: 12, h: 150 }, { x: 700, y: 950, w: 12, h: 150 },
+  { x: 1350, y: 700, w: 12, h: 150 }, { x: 1350, y: 950, w: 12, h: 150 },
 ];
-let myPos = null, movePositions = {}, moveTraces = {}, myClues = [];
+// Furniture objects. traceIds are the 6 objects that can hide a trace;
+// every other object is a decoy (same look, same interaction, "nothing here").
+const OBJECTS = [
+  { id: "sofa", name: "Sofa", room: "Phòng khách", x: 200, y: 280, w: 150, h: 70, color: "#c86f4a" },
+  { id: "table_khach", name: "Bàn khách", room: "Phòng khách", x: 480, y: 150, w: 110, h: 60, color: "#8d6e63" },
+  { id: "tv", name: "Tủ TV", room: "Phòng khách", x: 520, y: 400, w: 130, h: 50, color: "#374151" },
+  { id: "plant_khach", name: "Chậu cây", room: "Phòng khách", x: 650, y: 420, w: 60, h: 60, color: "#4d7c0f" },
+  { id: "stove", name: "Bếp nấu", room: "Bếp", x: 1020, y: 180, w: 120, h: 70, color: "#9ca3af" },
+  { id: "fridge", name: "Tủ lạnh", room: "Bếp", x: 880, y: 400, w: 80, h: 90, color: "#e5e7eb" },
+  { id: "table_bep", name: "Bàn bếp", room: "Bếp", x: 1250, y: 380, w: 120, h: 60, color: "#8d6e63" },
+  { id: "plant_bep", name: "Chậu cây", room: "Bếp", x: 1400, y: 150, w: 60, h: 60, color: "#4d7c0f" },
+  { id: "crate", name: "Thùng kho", room: "Kho", x: 1680, y: 280, w: 100, h: 80, color: "#b45309" },
+  { id: "shelf_kho", name: "Kệ kho", room: "Kho", x: 1850, y: 420, w: 110, h: 50, color: "#92400e" },
+  { id: "box_kho", name: "Hộp kho", room: "Kho", x: 1580, y: 430, w: 80, h: 60, color: "#d97706" },
+  { id: "bed", name: "Giường", room: "Phòng ngủ", x: 180, y: 880, w: 180, h: 110, color: "#7c3aed" },
+  { id: "wardrobe", name: "Tủ quần áo", room: "Phòng ngủ", x: 480, y: 760, w: 110, h: 90, color: "#6d4c41" },
+  { id: "lamp", name: "Đèn ngủ", room: "Phòng ngủ", x: 600, y: 980, w: 50, h: 50, color: "#facc15" },
+  { id: "shelf", name: "Kệ sách", room: "Thư viện", x: 920, y: 880, w: 140, h: 70, color: "#78350f" },
+  { id: "table_tv", name: "Bàn thư viện", room: "Thư viện", x: 1150, y: 780, w: 120, h: 60, color: "#8d6e63" },
+  { id: "plant_tv", name: "Chậu cây", room: "Thư viện", x: 780, y: 980, w: 60, h: 60, color: "#4d7c0f" },
+  { id: "tub", name: "Bồn tắm", room: "Phòng tắm", x: 1620, y: 880, w: 140, h: 90, color: "#e0f2fe" },
+  { id: "mirror", name: "Gương", room: "Phòng tắm", x: 1850, y: 780, w: 90, h: 50, color: "#bae6fd" },
+  { id: "sink", name: "Bồn rửa", room: "Phòng tắm", x: 1440, y: 980, w: 90, h: 60, color: "#f1f5f9" },
+  { id: "chair_hl", name: "Ghế hành lang", room: "Hành lang", x: 900, y: 600, w: 80, h: 50, color: "#a16207" },
+  { id: "paint_hl", name: "Tranh hành lang", room: "Hành lang", x: 1400, y: 600, w: 90, h: 40, color: "#b45309" },
+];
+// Riddles: one per trace object. They point to room/object WITHOUT naming it directly.
+const RIDDLES = [
+  { objectId: "tub", riddle: "🧩 Nơi nước chảy róc rách, soi mình mỗi sáng." },
+  { objectId: "shelf", riddle: "🧩 Nơi giữ những câu chuyện cũ, im lặng và bụi." },
+  { objectId: "stove", riddle: "🧩 Nơi nấu nướng, dao thớt còn mùi." },
+  { objectId: "bed", riddle: "🧩 Nơi giấc mơ ngủ lại, gối còn ấm." },
+  { objectId: "crate", riddle: "🧩 Nơi cất đồ cũ, ít ai mở ra." },
+  { objectId: "sofa", riddle: "🧩 Nơi ngồi kể chuyện, ghế êm và ấm." },
+];
+function objectById(id) { return OBJECTS.find((o) => o.id === id); }
+let myPos = null, movePositions = {}, moveTraces = {}, myClues = [], myCollectedIds = [];
 let moveLoopOn = false, lastMoveTick = 0, lastPosSync = 0, posSpawned = false, posAttached = false;
-let keysDown = {}, joyVec = { x: 0, y: 0 };
+let keysDown = {}, joyVec = { x: 0, y: 0 }, walkPhase = 0;
 let botWanderOn = false, botTargets = {};
 function buildTraces(mission) {
   const loc = (mission && mission.location) || "hiện trường";
@@ -172,22 +239,40 @@ function buildTraces(mission) {
     `Còn sót lại một sợi chỉ / mảnh vụn lạ ở ${loc}.`,
   ].slice(0, 6);
   const out = {};
-  texts.forEach((text, i) => { out[`t${i + 1}`] = { x: TRACE_SPOTS[i].x, y: TRACE_SPOTS[i].y, text }; });
+  RIDDLES.forEach((r, i) => { out[r.objectId] = { objectId: r.objectId, text: texts[i] || texts[0] }; });
   return out;
 }
 function renderNotebook() {
-  $("notebookList").innerHTML = myClues.length
-    ? myClues.map((c) => `<li>🔍 ${esc(c)}</li>`).join("")
-    : `<li class="small">Chưa nhặt được dấu vết nào. Hãy đi tìm các dấu sáng vàng trên bản đồ.</li>`;
+  $("notebookList").innerHTML = RIDDLES.map((r) => {
+    const got = myCollectedIds.includes(r.objectId);
+    const obj = objectById(r.objectId);
+    if (got) {
+      const clue = myClues[myCollectedIds.indexOf(r.objectId)] || "";
+      return `<li>✅ Đã tìm ở ${obj ? obj.room : ""}: ${esc(clue)}</li>`;
+    }
+    return `<li>${esc(r.riddle)}</li>`;
+  }).join("");
 }
-function nearestTrace() {
+function nearestObject() {
   if (!myPos) return null;
-  let best = null, bestD = 80;
-  Object.entries(moveTraces || {}).forEach(([id, t]) => {
-    const d = Math.hypot(t.x - myPos.x, t.y - myPos.y);
-    if (d < bestD) { bestD = d; best = { id, ...t }; }
+  let best = null, bestD = 75;
+  OBJECTS.forEach((o) => {
+    const dx = Math.max(o.x - myPos.x, 0, myPos.x - (o.x + o.w));
+    const dy = Math.max(o.y - myPos.y, 0, myPos.y - (o.y + o.h));
+    const d = Math.hypot(dx, dy);
+    if (d < bestD) { bestD = d; best = o; }
   });
   return best;
+}
+function hitsWall(x, y) {
+  const r = 20;
+  return WALLS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h);
+}
+function tryMove(x, y) {
+  // axis-separated so door gaps stay passable
+  let nx = x, ny = y;
+  if (!hitsWall(nx, myPos.y)) myPos.x = Math.max(24, Math.min(WORLD_W - 24, nx));
+  if (!hitsWall(myPos.x, ny)) myPos.y = Math.max(24, Math.min(WORLD_H - 24, ny));
 }
 function syncPos(force) {
   if (!db || !roomCode || !myUid || !myPos) return;
@@ -204,7 +289,8 @@ function attachPositions() {
     if (!posSpawned && myUid && !movePositions[myUid]) {
       const uids = publicState.players ? Object.keys(publicState.players) : [myUid];
       const idx = Math.max(0, uids.indexOf(myUid));
-      myPos = { x: 800 + ((idx % 3) - 1) * 90, y: 450 + Math.floor(idx / 3) * 90 };
+      // Spawn in the corridor (no wall there) so nobody starts inside a wall.
+      myPos = { x: 200 + idx * 130, y: 625 };
       posSpawned = true;
       syncPos(true);
     } else if (movePositions[myUid] && !myPos) {
@@ -213,18 +299,48 @@ function attachPositions() {
   });
   onValue(ref(db, `rooms/${roomCode}/public/traces`), (snap) => { moveTraces = snap.val() || {}; });
 }
-function drawBeanCanvas(ctx, x, y, color, name, isBot, ghost, isMe) {
+function drawCapyCanvas(ctx, x, y, key, name, isBot, ghost, isMe, moving) {
+  const f = capyFace(key);
+  const fur = ghost ? "#94a3b8" : f.fur;
+  const bob = moving ? Math.sin(walkPhase * 1.4) * 2 : Math.sin(Date.now() / 500) * 1.2;
+  const legOff = moving ? Math.sin(walkPhase) * 5 : 0;
   ctx.save();
   if (ghost) ctx.globalAlpha = 0.45;
-  ctx.fillStyle = color; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.roundRect(x - 22, y - 30, 44, 48, 18); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#cfe8ff"; ctx.beginPath(); ctx.ellipse(x, y - 8, 16, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#111827"; ctx.fillRect(x - 14, y + 18, 12, 8); ctx.fillRect(x + 2, y + 18, 12, 8);
+  // soft shadow under character
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(x, y + 26, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
+  const by = y + bob;
+  ctx.fillStyle = "#5d4037"; ctx.fillRect(x - 16, by + 18 + legOff, 13, 10); ctx.fillRect(x + 3, by + 18 - legOff, 13, 10);
+  ctx.fillStyle = fur; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(x - 20, by - 22, 8, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x + 20, by - 22, 8, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(x - 26, by - 28, 52, 52, 20); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.globalAlpha = ghost ? 0.45 : 0.18; ctx.beginPath(); ctx.ellipse(x - 12, by - 18, 11, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = ghost ? 0.45 : 1;
+  // snout
+  ctx.fillStyle = ghost ? "#e2e8f0" : "#d7ccc8"; ctx.beginPath(); ctx.roundRect(x - 17, by + 2, 34, 16, 8); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.ellipse(x, by + 10, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+  if (!ghost) {
+    ctx.fillStyle = "#111827"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 2;
+    if (f.eye === 1) { ctx.beginPath(); ctx.moveTo(x - 14, by - 12); ctx.lineTo(x - 6, by - 4); ctx.moveTo(x - 6, by - 12); ctx.lineTo(x - 14, by - 4); ctx.moveTo(x + 6, by - 12); ctx.lineTo(x + 14, by - 4); ctx.moveTo(x + 14, by - 12); ctx.lineTo(x + 6, by - 4); ctx.stroke(); }
+    else if (f.eye === 2) { ctx.beginPath(); ctx.arc(x - 10, by - 6, 5, Math.PI, 0); ctx.arc(x + 10, by - 6, 5, Math.PI, 0); ctx.stroke(); }
+    else if (f.eye === 3) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x - 10, by - 8, 5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.arc(x - 10, by - 8, 2.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 2.5, 0, Math.PI * 2); ctx.fill(); }
+    else if (f.eye === 4) { ctx.beginPath(); ctx.moveTo(x - 14, by - 12); ctx.lineTo(x - 6, by - 8); ctx.moveTo(x + 6, by - 8); ctx.lineTo(x + 14, by - 12); ctx.stroke(); ctx.beginPath(); ctx.arc(x - 10, by - 4, 2.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(x - 10, by - 8, 3.5, 0, Math.PI * 2); ctx.arc(x + 10, by - 8, 3.5, 0, Math.PI * 2); ctx.fill(); }
+    // mouth
+    if (f.mouth === 0) { ctx.beginPath(); ctx.arc(x, by + 18, 5, 0, Math.PI); ctx.stroke(); ctx.fillStyle = "#f48fb1"; ctx.beginPath(); ctx.ellipse(x, by + 21, 5, 3, 0, 0, Math.PI * 2); ctx.fill(); }
+    else if (f.mouth === 1) { ctx.beginPath(); ctx.arc(x, by + 14, 8, 0, Math.PI); ctx.fillStyle = "#fff"; ctx.fill(); ctx.stroke(); }
+    else if (f.mouth === 2) { ctx.fillStyle = "#5d4037"; ctx.beginPath(); ctx.ellipse(x, by + 19, 8, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(x, by + 18, 4, 0, Math.PI * 2); ctx.stroke(); }
+    // accessory (simple)
+    if (f.acc === 1) { ctx.fillStyle = "#111827"; ctx.fillRect(x - 18, by - 14, 14, 8); ctx.fillRect(x + 4, by - 14, 14, 8); }
+    else if (f.acc === 2) { ctx.fillStyle = "#2f7de1"; ctx.beginPath(); ctx.arc(x, by - 26, 16, Math.PI, 0); ctx.fill(); ctx.stroke(); }
+    else if (f.acc === 3) { ctx.fillStyle = "#f9a8d4"; ctx.beginPath(); ctx.arc(x + 20, by - 30, 5, 0, Math.PI * 2); ctx.fill(); }
+    else if (f.acc === 4) { ctx.fillStyle = "#ef4444"; ctx.fillRect(x - 18, by - 26, 36, 6); }
+  }
   ctx.font = "bold 15px system-ui"; ctx.textAlign = "center";
   ctx.fillStyle = "#fff"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 4;
-  ctx.strokeText(name, x, y - 38); ctx.fillText(name, x, y - 38);
-  if (isBot) { ctx.font = "bold 11px system-ui"; ctx.fillStyle = "#059669"; ctx.fillText("BOT", x, y + 38); }
-  if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 2, 34, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.strokeText(name, x, y - 40); ctx.fillText(name, x, y - 40);
+  if (isBot) { ctx.font = "bold 11px system-ui"; ctx.fillStyle = "#059669"; ctx.fillText("BOT", x, y + 40); }
+  if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 2, 36, 0, Math.PI * 2); ctx.stroke(); }
   ctx.restore();
 }
 function drawMovement() {
@@ -233,31 +349,52 @@ function drawMovement() {
   const camX = myPos ? Math.max(0, Math.min(WORLD_W - VIEW_W, myPos.x - VIEW_W / 2)) : 0;
   const camY = myPos ? Math.max(0, Math.min(WORLD_H - VIEW_H, myPos.y - VIEW_H / 2)) : 0;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+  // Rooms with floor texture: alternating planks/dots + soft top gradient
   MAP_ZONES.forEach((z) => {
     ctx.fillStyle = z.color; ctx.fillRect(z.x - camX, z.y - camY, z.w, z.h);
-    ctx.strokeStyle = "rgba(17,24,39,.5)"; ctx.lineWidth = 3; ctx.strokeRect(z.x - camX, z.y - camY, z.w, z.h);
-    ctx.font = "bold 26px system-ui"; ctx.fillStyle = "rgba(17,24,39,.65)"; ctx.textAlign = "left";
+    ctx.fillStyle = z.floor2;
+    for (let px = z.x + 20; px < z.x + z.w; px += 70) { ctx.fillRect(px - camX, z.y - camY, 3, z.h); }
+    for (let py = z.y + 30; py < z.y + z.h; py += 70) { ctx.fillRect(z.x - camX, py - camY, z.w, 2); }
+    const grad = ctx.createLinearGradient(0, z.y - camY, 0, z.y - camY + 60);
+    grad.addColorStop(0, "rgba(255,255,255,.28)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad; ctx.fillRect(z.x - camX, z.y - camY, z.w, 60);
+    ctx.strokeStyle = "rgba(17,24,39,.45)"; ctx.lineWidth = 3; ctx.strokeRect(z.x - camX, z.y - camY, z.w, z.h);
+    ctx.font = "bold 26px system-ui"; ctx.fillStyle = "rgba(17,24,39,.6)"; ctx.textAlign = "left";
     ctx.fillText(z.name, z.x - camX + 18, z.y - camY + 40);
   });
-  const pulse = 6 + Math.sin(Date.now() / 300) * 3;
-  Object.values(moveTraces || {}).forEach((t) => {
-    const sx = t.x - camX, sy = t.y - camY;
-    ctx.save(); ctx.fillStyle = "rgba(250,204,21,.35)"; ctx.beginPath(); ctx.arc(sx, sy, 26 + pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#facc15"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(sx, sy - 18); ctx.lineTo(sx + 14, sy); ctx.lineTo(sx, sy + 18); ctx.lineTo(sx - 14, sy); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#111827"; ctx.font = "bold 18px system-ui"; ctx.textAlign = "center"; ctx.fillText("!", sx, sy + 6); ctx.restore();
+  // Walls with shading
+  WALLS.forEach((w) => {
+    ctx.fillStyle = "#3f3f46"; ctx.fillRect(w.x - camX, w.y - camY, w.w, w.h);
+    ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(w.x - camX, w.y - camY, w.w, 3);
   });
+  // Furniture: shadow + body + highlight. Near object gets a soft glow,
+  // applied to EVERY object the same way, so glow never reveals a trace.
+  const nearObj = nearestObject();
+  OBJECTS.forEach((o) => {
+    const sx = o.x - camX, sy = o.y - camY;
+    ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.beginPath(); ctx.roundRect(sx + 4, sy + 6, o.w, o.h, 10); ctx.fill();
+    if (nearObj && nearObj.id === o.id) {
+      const pulse = 8 + Math.sin(Date.now() / 300) * 3;
+      ctx.fillStyle = "rgba(250,204,21,.35)"; ctx.beginPath(); ctx.roundRect(sx - pulse, sy - pulse, o.w + pulse * 2, o.h + pulse * 2, 14); ctx.fill();
+    }
+    ctx.fillStyle = o.color; ctx.strokeStyle = "#111827"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(sx, sy, o.w, o.h, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.fillRect(sx + 6, sy + 5, o.w - 12, 8);
+    ctx.font = "bold 13px system-ui"; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
+    ctx.fillText(o.name, sx + o.w / 2, sy + o.h / 2 + 5);
+  });
+  // Characters
   const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
   players.forEach((p) => {
     const pos = movePositions[p.uid]; if (!pos) return;
-    drawBeanCanvas(ctx, pos.x - camX, pos.y - camY, colorFor(p.uid), p.name, !!p.isBot, p.alive === false, p.uid === myUid);
+    const moving = p.uid === myUid && (keysDown["w"] || keysDown["a"] || keysDown["s"] || keysDown["d"] || joyVec.x !== 0 || joyVec.y !== 0);
+    drawCapyCanvas(ctx, pos.x - camX, pos.y - camY, p.uid, p.name, !!p.isBot, p.alive === false, p.uid === myUid, moving);
   });
-  const near = nearestTrace();
   const btn = $("traceActionBtn");
-  if (near && btn) {
+  if (nearObj && btn) {
     show("traceActionBtn", true);
-    btn.textContent = myPrivate.role === "culprit" ? "🕵️ Giấu dấu vết này" : "🔍 Xem / Nhặt dấu vết";
-    $("moveStatus").textContent = "Bạn đang ở gần một dấu vết. Bấm nút góc phải để tương tác.";
+    btn.textContent = myPrivate.role === "culprit" ? `🕵️ Giấu dấu vết ở ${nearObj.name}` : `🔍 Xem ${nearObj.name}`;
+    $("moveStatus").textContent = `Bạn đang ở gần ${nearObj.name} (${nearObj.room}). Bấm nút góc phải để xem — có thể có dấu vết, cũng có thể không có gì.`;
   } else if (btn) { show("traceActionBtn", false); }
 }
 function moveTick(ts) {
@@ -273,8 +410,10 @@ function moveTick(ts) {
   vx += joyVec.x; vy += joyVec.y;
   const len = Math.hypot(vx, vy);
   if (len > 0) {
-    myPos.x = Math.max(24, Math.min(WORLD_W - 24, myPos.x + (vx / Math.max(1, len)) * 280 * dt * (len > 1 ? 1 : len)));
-    myPos.y = Math.max(24, Math.min(WORLD_H - 24, myPos.y + (vy / Math.max(1, len)) * 280 * dt * (len > 1 ? 1 : len)));
+    walkPhase += dt * 12;
+    const step = 280 * dt * Math.min(1, len);
+    const ux = vx / Math.max(1, len), uy = vy / Math.max(1, len);
+    tryMove(myPos.x + ux * step, myPos.y + uy * step);
     syncPos(false);
   }
   drawMovement();
@@ -286,20 +425,38 @@ function startMovement() {
 function startBotWander() {
   if (botWanderOn || !db || !roomCode) return;
   botWanderOn = true;
+  const regionOf = (x, y) => (y < 550 ? "top" : (y <= 700 ? "corridor" : "bottom"));
+  const topDoorX = (x) => (x < 800 ? 350 : (x < 1500 ? 1050 : 1750));
+  const botDoorX = (x) => (x < 700 ? 350 : (x < 1350 ? 1050 : 1750));
+  const pathFor = (cur, target) => {
+    const r1 = regionOf(cur.x, cur.y), r2 = regionOf(target.x, target.y);
+    if (r1 === r2) return [target];
+    if (r1 === "top" && r2 === "corridor") { const dx = topDoorX(cur.x); return [{ x: dx, y: 500 }, { x: dx, y: 625 }, target]; }
+    if (r1 === "corridor" && r2 === "top") { const dx = topDoorX(target.x); return [{ x: dx, y: 625 }, { x: dx, y: 500 }, target]; }
+    if (r1 === "bottom" && r2 === "corridor") { const dx = botDoorX(cur.x); return [{ x: dx, y: 750 }, { x: dx, y: 625 }, target]; }
+    if (r1 === "corridor" && r2 === "bottom") { const dx = botDoorX(target.x); return [{ x: dx, y: 625 }, { x: dx, y: 750 }, target]; }
+    if (r1 === "top" && r2 === "bottom") { const d1 = topDoorX(cur.x), d2 = botDoorX(target.x); return [{ x: d1, y: 500 }, { x: d1, y: 625 }, { x: d2, y: 625 }, { x: d2, y: 750 }, target]; }
+    if (r1 === "bottom" && r2 === "top") { const d1 = botDoorX(cur.x), d2 = topDoorX(target.x); return [{ x: d1, y: 750 }, { x: d1, y: 625 }, { x: d2, y: 625 }, { x: d2, y: 500 }, target]; }
+    return [target];
+  };
   setInterval(async () => {
     if (!isHost || publicState.phase !== "investigation" || !publicState.botFill) return;
     const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
     const bots = players.filter((p) => p.isBot && p.alive !== false);
     for (const b of bots) {
-      const cur = movePositions[b.uid] || { x: 800, y: 450 };
-      if (!botTargets[b.uid] || Math.hypot(botTargets[b.uid].x - cur.x, botTargets[b.uid].y - cur.y) < 60) {
-        botTargets[b.uid] = { x: 100 + Math.random() * 1400, y: 100 + Math.random() * 700 };
+      const cur = movePositions[b.uid] || { x: 400, y: 625 };
+      if (!botTargets[b.uid] || !botTargets[b.uid].length) {
+        const spots = [{ x: 400, y: 625 }, { x: 1000, y: 625 }, { x: 1600, y: 625 }, { x: 400, y: 275 }, { x: 1150, y: 275 }, { x: 1750, y: 275 }, { x: 350, y: 900 }, { x: 1000, y: 900 }, { x: 1650, y: 900 }];
+        const target = spots[Math.floor(Math.random() * spots.length)];
+        botTargets[b.uid] = pathFor(cur, target);
       }
-      const t = botTargets[b.uid];
-      const d = Math.hypot(t.x - cur.x, t.y - cur.y) || 1;
-      const nx = Math.max(24, Math.min(WORLD_W - 24, cur.x + (t.x - cur.x) / d * 55));
-      const ny = Math.max(24, Math.min(WORLD_H - 24, cur.y + (t.y - cur.y) / d * 55));
-      await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: Math.round(nx), y: Math.round(ny) }).catch(() => {});
+      const wp = botTargets[b.uid][0];
+      const d = Math.hypot(wp.x - cur.x, wp.y - cur.y) || 1;
+      if (d < 60) { botTargets[b.uid].shift(); continue; }
+      let nx = cur.x + (wp.x - cur.x) / d * 55, ny = cur.y + (wp.y - cur.y) / d * 55;
+      const blocked = WALLS.some((w) => nx + 20 > w.x && nx - 20 < w.x + w.w && ny + 20 > w.y && ny - 20 < w.y + w.h);
+      if (blocked) { botTargets[b.uid] = pathFor(cur, { x: 1000, y: 625 }); continue; }
+      await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: Math.round(Math.max(24, Math.min(WORLD_W - 24, nx))), y: Math.round(Math.max(24, Math.min(WORLD_H - 24, ny))) }).catch(() => {});
     }
   }, 1000);
 }
@@ -372,7 +529,7 @@ function renderPublic() {
     : "";
   $("playerList").innerHTML = players.map((p) => {
     const ghost = p.alive === false;
-    return `<div class="char-item ${ghost ? "ghost" : ""}">${beanSVG(p.uid || p.name, ghost)}<div class="cname">${esc(p.name)}</div>${p.uid === myUid ? `<span class="ctag">BẠN</span>` : ""} ${p.isBot ? `<span class="ctag bot">BOT</span>` : ""}${ghost ? `<div class="small">Đã bị loại</div>` : ""}</div>`;
+    return `<div class="char-item ${ghost ? "ghost" : ""}">${capySVG(p.uid || p.name, ghost)}<div class="cname">${esc(p.name)}</div>${p.uid === myUid ? `<span class="ctag">BẠN</span>` : ""} ${p.isBot ? `<span class="ctag bot">BOT</span>` : ""}${ghost ? `<div class="small">Đã bị loại</div>` : ""}</div>`;
   }).join("");
   $("playerList").className = "char-row";
 
@@ -398,7 +555,18 @@ function renderPublic() {
   if (phase === "investigation") {
     attachChat();
     startMovement();
-    $("sceneLabel").textContent = publicState.scene || "Hãy đi tìm các dấu sáng vàng trên bản đồ.";
+    $("sceneLabel").textContent = publicState.scene || "Hãy giải câu đố trong Sổ manh mối rồi đi tìm đúng đồ vật.";
+    if (myPrivate.role === "culprit") {
+      $("roleHud").textContent = "🎭 Bạn là THỦ PHẠM — tìm dấu vết trước người khác và giấu nó đi!";
+      $("missionHud").textContent = myPrivate.mission ? `Nhiệm vụ của bạn: ${myPrivate.mission.typeLabel} — ${myPrivate.mission.detail}` : "";
+    } else if (myPrivate.role === "accomplice") {
+      $("roleHud").textContent = "🤝 Bạn là ĐỒNG BỌN — chỉ bạn và thủ phạm biết. Giúp đánh lạc hướng.";
+      $("missionHud").textContent = "";
+    } else {
+      $("roleHud").textContent = "🔍 Bạn là NGƯỜI VÔ TỘI — giải câu đố, đi tìm dấu vết trong đồ vật.";
+      $("missionHud").textContent = publicState.scene || "";
+    }
+    renderNotebook();
     show("toVoteBtn", isHost);
     if (isHost) startBotWander();
   }
@@ -407,7 +575,7 @@ function renderPublic() {
   if (phase === "vote") {
     const alivePlayers = players.filter((p) => p.alive !== false && p.uid !== myUid);
     $("voteList").innerHTML = alivePlayers.map((p) => (
-      `<button class="vote-btn ${myVote === p.uid ? "selected" : ""}" data-vote="${esc(p.uid)}">${beanSVG(p.uid || p.name)}<span>${esc(p.name)}${p.isBot ? " · BOT" : ""}</span></button>`
+      `<button class="vote-btn ${myVote === p.uid ? "selected" : ""}" data-vote="${esc(p.uid)}">${capySVG(p.uid || p.name)}<span>${esc(p.name)}${p.isBot ? " · BOT" : ""}</span></button>`
     )).join("") || "<p class=\"small\">Không còn ai để bỏ phiếu.</p>";
     document.querySelectorAll("[data-vote]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -427,7 +595,7 @@ function renderPublic() {
     const r = publicState.reveal;
     $("revealCard").classList.toggle("win-good", !!r.innocentWin);
     $("revealCard").classList.toggle("win-bad", !r.innocentWin);
-    $("revealChars").innerHTML = `<div class="big"><div>${beanSVG(r.culpritUid || r.culpritName)}</div><div class="cap">THỦ PHẠM<br>${esc(r.culpritName)}</div></div>` + (r.accompliceUid ? `<div class="mid"><div>${beanSVG(r.accompliceUid)}</div><div class="cap">ĐỒNG BỌN<br>${esc(r.accompliceName || "")}</div></div>` : `<div class="mid"><div style="font-size:52px">—</div><div class="cap">Không có<br>đồng bọn</div></div>`);
+    $("revealChars").innerHTML = `<div class="big"><div>${capySVG(r.culpritUid || r.culpritName)}</div><div class="cap">THỦ PHẠM<br>${esc(r.culpritName)}</div></div>` + (r.accompliceUid ? `<div class="mid"><div>${capySVG(r.accompliceUid)}</div><div class="cap">ĐỒNG BỌN<br>${esc(r.accompliceName || "")}</div></div>` : `<div class="mid"><div style="font-size:52px">—</div><div class="cap">Không có<br>đồng bọn</div></div>`);
     $("resultLabel").textContent = r.innocentWin
       ? "🎉 Phe người chơi vô tội THẮNG — vì người bị tố cáo đúng là thủ phạm."
       : "😈 Phe thủ phạm THẮNG — vì người bị tố cáo không phải thủ phạm (là đồng bọn hoặc người vô tội), hoặc hòa phiếu.";
@@ -796,16 +964,23 @@ document.addEventListener("keyup", (e) => { keysDown[e.key.toLowerCase()] = fals
   base.addEventListener("pointercancel", endJoy);
 })();
 $("traceActionBtn").addEventListener("click", async () => {
-  const near = nearestTrace();
-  if (!near || !db || !roomCode) return;
+  const obj = nearestObject();
+  if (!obj || !db || !roomCode) return;
+  const trace = (moveTraces || {})[obj.id];
+  if (!trace) {
+    // Decoy: same interaction, funny "nothing here", object stays.
+    const lines = ["Không có gì ở đây. Chỉ là đồ đạc bình thường thôi.", "Bạn lục kỹ rồi — ở đây sạch bong, không có dấu vết.", "Không có gì lạ ở đây cả. Thử câu đố khác xem."];
+    $("moveStatus").textContent = lines[Math.floor(Math.random() * lines.length)];
+    return;
+  }
   if (myPrivate.role === "culprit") {
     // Culprit hides: trace disappears for everyone, no clue for anyone.
-    await set(ref(db, `rooms/${roomCode}/public/traces/${near.id}`), null).catch(() => {});
+    await set(ref(db, `rooms/${roomCode}/public/traces/${obj.id}`), null).catch(() => {});
     $("moveStatus").textContent = "Bạn đã giấu dấu vết. Người khác tới đây sẽ không còn thấy gì.";
   } else {
-    if (!myClues.includes(near.text)) myClues.push(near.text);
+    if (!myCollectedIds.includes(obj.id)) { myCollectedIds.push(obj.id); myClues.push(trace.text); }
     renderNotebook();
-    await set(ref(db, `rooms/${roomCode}/public/traces/${near.id}`), null).catch(() => {});
+    await set(ref(db, `rooms/${roomCode}/public/traces/${obj.id}`), null).catch(() => {});
     $("moveStatus").textContent = "Đã nhặt dấu vết, xem trong Sổ manh mối của bạn.";
   }
 });
@@ -834,7 +1009,7 @@ function attachChat() {
     $("chatBox").innerHTML = Object.values(val).map((m) => {
       const plist = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
       const sender = plist.find((p) => p.name === m.name);
-      return `<div class="chatline"><span style="width:36px;flex-shrink:0;display:inline-block">${beanSVG(sender ? sender.uid : m.name)}</span><span class="bubble"><strong>${esc(m.name)}:</strong> ${esc(m.text)}</span></div>`;
+      return `<div class="chatline"><span style="width:36px;flex-shrink:0;display:inline-block">${capySVG(sender ? sender.uid : m.name)}</span><span class="bubble"><strong>${esc(m.name)}:</strong> ${esc(m.text)}</span></div>`;
     }).join("");
     $("chatBox").scrollTop = $("chatBox").scrollHeight;
   });
