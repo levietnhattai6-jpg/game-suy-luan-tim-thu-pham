@@ -16,6 +16,32 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[c]));
 
+
+// ---------- Original cute bean characters (SVG, inspired by round bean style) ----------
+// No copied assets/logos/names: simple original round body + visor + hat variation.
+const CHAR_COLORS = ["#e63b3b", "#2f7de1", "#2fae5f", "#f2b705", "#e86fb0", "#f07d1a", "#8b5cf6", "#17b8c4", "#7cb342", "#ef6c00"];
+function hashStr(s) { let h = 0; for (const ch of String(s ?? "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; }
+function colorFor(key) { return CHAR_COLORS[hashStr(key) % CHAR_COLORS.length]; }
+function beanSVG(key, ghost = false) {
+  const color = ghost ? "#94a3b8" : colorFor(key);
+  const v = hashStr(key) % 4;
+  let hat = "";
+  if (v === 1) hat = '<path d="M36 18 Q50 0 64 18" fill="#facc15" stroke="#111827" stroke-width="3"/>';
+  if (v === 2) hat = '<line x1="50" y1="18" x2="50" y2="6" stroke="#111827" stroke-width="3"/><circle cx="50" cy="6" r="6" fill="#e86fb0" stroke="#111827" stroke-width="2"/>';
+  if (v === 3) hat = '<path d="M38 20 L44 6 L50 16 L56 6 L62 20 Z" fill="#facc15" stroke="#111827" stroke-width="2"/>';
+  return `<svg viewBox="0 0 100 110" aria-hidden="true"><rect x="14" y="16" width="72" height="78" rx="34" fill="${color}" stroke="#111827" stroke-width="3"/>${hat}<ellipse cx="50" cy="48" rx="27" ry="17" fill="${ghost ? "#e2e8f0" : "#cfe8ff"}" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff" opacity=".9"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>`;
+}
+function sceneSVG(typeLabel) {
+  if (typeLabel === "Trộm cắp") return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#fef3c7"/><rect x="40" y="50" width="200" height="110" fill="#a16207" stroke="#111827" stroke-width="3"/><rect x="60" y="70" width="160" height="70" fill="#fde68a" stroke="#111827" stroke-width="2"/><rect x="100" y="95" width="80" height="45" fill="none" stroke="#dc2626" stroke-width="3" stroke-dasharray="8 6"/><text x="140" y="122" text-anchor="middle" font-size="20" font-weight="800" fill="#991b1b">TRỐNG!</text><rect x="300" y="60" width="150" height="100" fill="#fff" stroke="#111827" stroke-width="3"/><line x1="310" y1="70" x2="440" y2="150" stroke="#dc2626" stroke-width="4"/><text x="375" y="185" text-anchor="middle" font-size="18" font-weight="800" fill="#111827">Ngăn kéo bị mở</text></svg>`;
+  if (typeLabel === "Loại một người chơi") return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#e0e7ff"/><ellipse cx="120" cy="180" rx="90" ry="12" fill="#c7d2fe"/><rect x="90" y="80" width="70" height="70" rx="10" fill="#94a3b8" stroke="#111827" stroke-width="3" transform="rotate(-18 125 115)"/><rect x="70" y="150" width="14" height="40" fill="#64748b"/><ellipse cx="220" cy="185" rx="14" ry="7" fill="#475569"/><ellipse cx="270" cy="180" rx="14" ry="7" fill="#475569"/><ellipse cx="320" cy="175" rx="14" ry="7" fill="#475569"/><text x="380" y="90" font-size="20" font-weight="800" fill="#312e81">Ghế đổ…</text><text x="380" y="118" font-size="20" font-weight="800" fill="#312e81">người đâu rồi?</text></svg>`;
+  return `<svg viewBox="0 0 520 220"><rect width="520" height="220" fill="#dbeafe"/><rect x="60" y="60" width="180" height="110" rx="12" fill="#1e293b" stroke="#111827" stroke-width="3"/><rect x="80" y="80" width="140" height="70" fill="#93c5fd"/><path d="M150 80 L170 110 L190 80" fill="none" stroke="#dc2626" stroke-width="4"/><text x="150" y="185" text-anchor="middle" font-size="18" font-weight="800" fill="#111827">Màn hình nứt!</text><path d="M300 50 L315 75 L330 50 L345 75" fill="#facc15" stroke="#111827" stroke-width="2"/><text x="320" y="130" font-size="20" font-weight="800" fill="#111827">Có dấu vết lạ</text><text x="320" y="158" font-size="20" font-weight="800" fill="#111827">ở hiện trường</text></svg>`;
+}
+function clueIcon(typeLabel, i) {
+  if (typeLabel === "Trộm cắp") return i === 0 ? "🔑" : "🧵";
+  if (typeLabel === "Loại một người chơi") return i === 0 ? "🪑" : "👣";
+  return i === 0 ? "🔧" : "👣";
+}
+
 const PHASE_LABELS = {
   lobby: "Chờ người chơi",
   secret: "Nhận nhiệm vụ bí mật",
@@ -183,11 +209,10 @@ function renderPublic() {
     ? `Đã thêm ${publicState.botNames.length} bot cho đủ 5 người: ${publicState.botNames.join(", ")}`
     : "";
   $("playerList").innerHTML = players.map((p) => {
-    const tag = p.uid === myUid ? " (bạn)" : "";
-    const botTag = p.isBot ? " · Bot" : "";
-    const alive = p.alive === false ? " · đã bị loại khỏi hiện trường (trong cốt truyện)" : "";
-    return `<span class="pill ${p.uid === myUid ? "me" : ""}">${esc(p.name)}${esc(tag)}${esc(botTag)}${esc(alive)}</span>`;
-  }).join(" ");
+    const ghost = p.alive === false;
+    return `<div class="char-item ${ghost ? "ghost" : ""}">${beanSVG(p.uid || p.name, ghost)}<div class="cname">${esc(p.name)}</div>${p.uid === myUid ? `<span class="ctag">BẠN</span>` : ""} ${p.isBot ? `<span class="ctag bot">BOT</span>` : ""}${ghost ? `<div class="small">Đã bị loại</div>` : ""}</div>`;
+  }).join("");
+  $("playerList").className = "char-row";
 
   const phase = publicState.phase;
   show("secretCard", phase === "secret");
@@ -210,9 +235,10 @@ function renderPublic() {
   // Investigation
   if (phase === "investigation") {
     attachChat();
+    $("sceneArt").innerHTML = sceneSVG(publicState.missionTypeLabel || "");
     $("sceneLabel").textContent = publicState.scene || "";
     $("clueList").innerHTML = (publicState.clues || []).map((c, i) => (
-      `<div class="card clue"><strong>Manh mối ${i + 1}:</strong> ${esc(c)}</div>`
+      `<div class="card clue clue-card"><span class="clue-icon">${clueIcon(publicState.missionTypeLabel || "", i)}</span><span><strong>Manh mối ${i + 1}:</strong> ${esc(c)}</span></div>`
     )).join("");
     show("toVoteBtn", isHost);
   }
@@ -221,7 +247,7 @@ function renderPublic() {
   if (phase === "vote") {
     const alivePlayers = players.filter((p) => p.alive !== false && p.uid !== myUid);
     $("voteList").innerHTML = alivePlayers.map((p) => (
-      `<button class="vote-btn ${myVote === p.uid ? "selected" : ""}" data-vote="${esc(p.uid)}">Bỏ phiếu cho ${esc(p.name)}</button>`
+      `<button class="vote-btn ${myVote === p.uid ? "selected" : ""}" data-vote="${esc(p.uid)}">${beanSVG(p.uid || p.name)}<span>${esc(p.name)}${p.isBot ? " · BOT" : ""}</span></button>`
     )).join("") || "<p class=\"small\">Không còn ai để bỏ phiếu.</p>";
     document.querySelectorAll("[data-vote]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -239,6 +265,9 @@ function renderPublic() {
   // Reveal
   if (phase === "reveal" && publicState.reveal) {
     const r = publicState.reveal;
+    $("revealCard").classList.toggle("win-good", !!r.innocentWin);
+    $("revealCard").classList.toggle("win-bad", !r.innocentWin);
+    $("revealChars").innerHTML = `<div class="big"><div>${beanSVG(r.culpritUid || r.culpritName)}</div><div class="cap">THỦ PHẠM<br>${esc(r.culpritName)}</div></div>` + (r.accompliceUid ? `<div class="mid"><div>${beanSVG(r.accompliceUid)}</div><div class="cap">ĐỒNG BỌN<br>${esc(r.accompliceName || "")}</div></div>` : `<div class="mid"><div style="font-size:52px">—</div><div class="cap">Không có<br>đồng bọn</div></div>`);
     $("resultLabel").textContent = r.innocentWin
       ? "🎉 Phe người chơi vô tội THẮNG — vì người bị tố cáo đúng là thủ phạm."
       : "😈 Phe thủ phạm THẮNG — vì người bị tố cáo không phải thủ phạm (là đồng bọn hoặc người vô tội), hoặc hòa phiếu.";
@@ -583,9 +612,11 @@ function attachChat() {
   chatAttached = true;
   onValue(ref(db, `rooms/${roomCode}/public/chat`), (snap) => {
     const val = snap.val() || {};
-    $("chatBox").innerHTML = Object.values(val).map((m) => (
-      `<div class="chatline"><strong>${esc(m.name)}:</strong> ${esc(m.text)}</div>`
-    )).join("");
+    $("chatBox").innerHTML = Object.values(val).map((m) => {
+      const plist = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+      const sender = plist.find((p) => p.name === m.name);
+      return `<div class="chatline"><span style="width:36px;flex-shrink:0;display:inline-block">${beanSVG(sender ? sender.uid : m.name)}</span><span class="bubble"><strong>${esc(m.name)}:</strong> ${esc(m.text)}</span></div>`;
+    }).join("");
     $("chatBox").scrollTop = $("chatBox").scrollHeight;
   });
 }

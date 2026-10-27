@@ -6,33 +6,64 @@
 <title>Game Suy Luận — Tìm Thủ Phạm</title>
 <style>
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #101828; color: #f2f4f7; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: linear-gradient(180deg, #1e1b4b 0%, #312e81 45%, #0f172a 100%); color: #1f2937; min-height: 100vh; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 16px 14px 40px; }
-  h1 { font-size: 22px; margin: 8px 0 4px; }
-  h2 { font-size: 18px; margin: 18px 0 8px; }
-  h3 { font-size: 16px; margin: 14px 0 6px; }
+  h1 { font-size: 26px; margin: 6px 0 4px; color: #fff; text-shadow: 0 2px 0 #7c2d12; letter-spacing: .2px; }
+  h2 { font-size: 19px; margin: 14px 0 8px; color: #312e81; }
+  h3 { font-size: 16px; margin: 14px 0 6px; color: #312e81; }
   p, li { line-height: 1.55; font-size: 15px; }
-  .sub { color: #d0d5dd; }
-  .card { background: #1d2939; border: 1px solid #344054; border-radius: 14px; padding: 14px; margin: 12px 0; }
-  .warn { background: #422006; border-color: #b54708; }
-  .secret { background: #2a1a3d; border-color: #7a5af8; }
-  .clue { background: #122b22; border-color: #027a48; }
-  label { display: block; font-size: 14px; margin: 10px 0 4px; color: #d0d5dd; }
-  input, select, textarea { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid #475467; background: #0f172a; color: #fff; font-size: 16px; }
-  button { width: 100%; padding: 12px; margin-top: 10px; border: 0; border-radius: 10px; background: #dc6803; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
-  button.secondary { background: #344054; }
+  .sub { color: #e0e7ff; }
+  .card { background: #fffdf5; border: 3px solid #312e81; border-radius: 20px; padding: 16px; margin: 12px 0; box-shadow: 0 6px 0 rgba(0,0,0,.25); color: #1f2937; }
+  .warn { background: #fef3c7; border-color: #b45309; }
+  .secret { background: #ede9fe; border-color: #7c3aed; }
+  .clue { background: #ecfdf5; border-color: #059669; }
+  label { display: block; font-size: 14px; margin: 10px 0 4px; color: #374151; font-weight: 600; }
+  input, select, textarea { width: 100%; padding: 11px 12px; border-radius: 12px; border: 2px solid #a5b4fc; background: #fff; color: #111827; font-size: 16px; }
+  button { width: 100%; padding: 13px; margin-top: 10px; border: 0; border-radius: 14px; background: #ff6b35; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 0 #c2410c; }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 #c2410c; }
+  button.secondary { background: #6366f1; box-shadow: 0 4px 0 #3730a3; }
   button:disabled { opacity: .55; cursor: not-allowed; }
   .row { display: flex; gap: 8px; }
   .row button { flex: 1; }
-  .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #344054; font-size: 13px; margin: 2px; }
-  .pill.me { background: #dc6803; }
+  .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #e0e7ff; font-size: 13px; margin: 2px; color: #312e81; font-weight: 700; }
+  .pill.me { background: #ff6b35; color: #fff; }
   .msg { white-space: pre-line; }
-  .chatbox { max-height: 220px; overflow: auto; border: 1px solid #344054; border-radius: 10px; padding: 10px; background: #0f172a; }
-  .chatline { margin: 6px 0; font-size: 14px; }
-  .small { font-size: 13px; color: #d0d5dd; }
+  .chatbox { max-height: 260px; overflow: auto; border: 2px solid #c7d2fe; border-radius: 14px; padding: 10px; background: #f8fafc; }
+  .chatline { margin: 8px 0; font-size: 14px; display: flex; gap: 8px; align-items: flex-start; color: #111827; }
+  .chatline .bubble { background: #fff; border: 2px solid #e2e8f0; border-radius: 12px; padding: 6px 10px; flex: 1; }
+  .small { font-size: 13px; color: #4b5563; }
   .hidden { display: none !important; }
-  .vote-btn { text-align: left; background: #1d2939; border: 1px solid #475467; color: #fff; }
-  .vote-btn.selected { border-color: #dc6803; background: #422006; }
+  .vote-btn { text-align: left; background: #fff; border: 2px solid #c7d2fe; color: #111827; box-shadow: none; }
+  .vote-btn.selected { border-color: #ff6b35; background: #ffedd5; box-shadow: 0 0 0 3px #fdba74; }
+  .hero { text-align: center; padding: 10px 6px 2px; }
+  .hero-row { display: flex; justify-content: center; gap: 2px; }
+  .hero-row svg { width: 62px; height: 68px; }
+  .room-badge { display: inline-block; background: #facc15; color: #111827; font-size: 26px; font-weight: 900; letter-spacing: 4px; padding: 6px 16px; border-radius: 14px; border: 3px solid #111827; }
+  .char-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 10px 0; }
+  .char-item { text-align: center; width: 86px; }
+  .char-item svg { width: 72px; height: 80px; display: block; margin: 0 auto; }
+  .char-item .cname { font-weight: 800; font-size: 13px; color: #111827; word-break: break-word; }
+  .char-item .ctag { font-size: 11px; font-weight: 800; color: #fff; background: #6366f1; border-radius: 999px; padding: 1px 7px; display: inline-block; }
+  .char-item .ctag.bot { background: #059669; }
+  .char-item.ghost { opacity: .45; filter: grayscale(1); }
+  .vote-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .vote-grid .vote-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; min-height: 138px; }
+  .vote-grid .vote-btn svg { width: 72px; height: 80px; }
+  .vote-grid .vote-btn span { font-weight: 800; text-align: center; word-break: break-word; }
+  .scene-art { border-radius: 16px; overflow: hidden; border: 3px solid #312e81; margin: 10px 0; background: #fef3c7; }
+  .scene-art svg { display: block; width: 100%; height: auto; }
+  .clue-card { display: flex; gap: 10px; align-items: flex-start; }
+  .clue-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+  .meeting { background: #fee2e2; border-color: #dc2626; text-align: center; }
+  .meeting h2 { color: #991b1b; font-size: 22px; }
+  .reveal-stage { display: flex; justify-content: center; gap: 18px; align-items: flex-end; padding: 8px 0; flex-wrap: wrap; }
+  .reveal-stage .big svg { width: 130px; height: 144px; }
+  .reveal-stage .mid svg { width: 96px; height: 106px; }
+  .reveal-stage .cap { text-align: center; font-weight: 900; }
+  .win-good { background: #fef9c3; border-color: #ca8a04; }
+  .win-bad { background: #1e293b; border-color: #0f172a; color: #f8fafc; }
+  .win-bad h2, .win-bad p { color: #f8fafc; }
+  .win-bad .small { color: #cbd5e1; }
 </style>
 <script>
   // Firebase config for project game-d76d1, wired from the user's Firebase
@@ -51,7 +82,15 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
+  <div class="hero">
+    <div class="hero-row" aria-hidden="true">
+      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#e63b3b" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
+      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#2f7de1" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><path d="M38 18 Q50 2 62 18" fill="#facc15" stroke="#111827" stroke-width="3"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
+      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#2fae5f" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><circle cx="50" cy="10" r="7" fill="#e86fb0" stroke="#111827" stroke-width="3"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
+      <svg viewBox="0 0 100 110"><rect x="14" y="16" width="72" height="78" rx="34" fill="#f2b705" stroke="#111827" stroke-width="3"/><ellipse cx="50" cy="48" rx="27" ry="17" fill="#cfe8ff" stroke="#111827" stroke-width="3"/><ellipse cx="58" cy="43" rx="8" ry="5" fill="#fff"/><rect x="20" y="84" width="24" height="12" rx="6" fill="#111827"/><rect x="56" y="84" width="24" height="12" rx="6" fill="#111827"/></svg>
+    </div>
+    <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
+  </div>
   <p class="sub">Game trí tuệ cho nhóm 5–10 người. Một người nhận nhiệm vụ bí mật, cả nhóm điều tra và bỏ phiếu tìm thủ phạm. Phòng chỉ có 2–4 người vẫn chơi được: khi bắt đầu, hệ thống sẽ thêm bot cho đủ 5 người.</p>
 
   <div id="configWarn" class="card warn hidden">
@@ -91,7 +130,7 @@
 
   <!-- ROOM -->
   <div id="roomCard" class="card hidden">
-    <h2>Phòng <span id="roomCodeLabel"></span></h2>
+    <h2>Phòng <span id="roomCodeLabel" class="room-badge"></span></h2>
     <p id="botFillLabel" class="small"></p>
     <p>Giai đoạn: <strong id="phaseLabel"></strong> · Bạn là: <strong id="myNameLabel"></strong></p>
     <p id="playerCountLabel" class="small"></p>
@@ -135,6 +174,7 @@
   <!-- INVESTIGATION -->
   <div id="investigationCard" class="card hidden">
     <h2>3. Điều tra hiện trường</h2>
+    <div id="sceneArt" class="scene-art"></div>
     <p id="sceneLabel" class="msg"></p>
     <div id="clueList"></div>
     <h3>Trò chuyện trong game</h3>
@@ -146,11 +186,11 @@
   </div>
 
   <!-- VOTE -->
-  <div id="voteCard" class="card hidden">
-    <h2>4. Bỏ phiếu tìm thủ phạm</h2>
+  <div id="voteCard" class="card meeting hidden">
+    <h2>🚨 HỌP KHẨN — Ai là thủ phạm?</h2>
     <p>Chọn <strong>1 người</strong> bạn cho là thủ phạm. Nhớ luật: chỉ tố cáo đúng thủ phạm thì phe vô tội mới thắng. Tố cáo trúng đồng bọn cũng tính là phe thủ phạm thắng.</p>
     <p>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</p>
-    <div id="voteList"></div>
+    <div id="voteList" class="vote-grid"></div>
     <p id="voteStatus" class="small msg"></p>
     <button id="revealBtn" class="hidden">Chủ phòng: công bố kết quả</button>
   </div>
@@ -158,6 +198,7 @@
   <!-- REVEAL -->
   <div id="revealCard" class="card hidden">
     <h2>5. Kết quả</h2>
+    <div id="revealChars" class="reveal-stage"></div>
     <p id="resultLabel" class="msg"></p>
     <p id="revealDetailLabel" class="msg"></p>
     <p id="voteBreakdownLabel" class="msg"></p>
