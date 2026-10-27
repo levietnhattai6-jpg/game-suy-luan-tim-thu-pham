@@ -52,7 +52,7 @@
 <body>
 <div class="wrap">
   <h1>🔍 Game Suy Luận — Tìm Thủ Phạm</h1>
-  <p class="sub">Game trí tuệ cho nhóm 5–10 người. Một người nhận nhiệm vụ bí mật, cả nhóm điều tra và bỏ phiếu tìm thủ phạm.</p>
+  <p class="sub">Game trí tuệ cho nhóm 5–10 người. Một người nhận nhiệm vụ bí mật, cả nhóm điều tra và bỏ phiếu tìm thủ phạm. Phòng chỉ có 2–4 người vẫn chơi được: khi bắt đầu, hệ thống sẽ thêm bot cho đủ 5 người.</p>
 
   <div id="configWarn" class="card warn hidden">
     <strong>Chưa cấu hình Firebase.</strong>
@@ -71,6 +71,7 @@
       <li><strong>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</strong></li>
       <li><strong>Luật thắng — quan trọng nhất: CHỈ khi người bị tố cáo đúng là thủ phạm thì phe người chơi vô tội mới thắng. Nếu người bị tố cáo là đồng bọn HOẶC là người vô tội thì phe thủ phạm (thủ phạm + đồng bọn nếu có) thắng.</strong> Sau đó game công bố toàn bộ vai trò, nhiệm vụ và đồng bọn.</li>
       <li>Không quảng cáo, không tiền thật, không giải thưởng.</li>
+      <li><strong>Thêm bot cho đủ người:</strong> phòng chỉ có 2–4 người vẫn bắt đầu được, hệ thống sẽ thêm bot cho đủ 5 người. Bot có thể là thủ phạm, đồng bọn hoặc người vô tội, trò chuyện và bỏ phiếu như người chơi. Phòng chỉ có 1 người thì không bắt đầu được.</li>
     </ul>
   </div>
 
@@ -91,6 +92,7 @@
   <!-- ROOM -->
   <div id="roomCard" class="card hidden">
     <h2>Phòng <span id="roomCodeLabel"></span></h2>
+    <p id="botFillLabel" class="small"></p>
     <p>Giai đoạn: <strong id="phaseLabel"></strong> · Bạn là: <strong id="myNameLabel"></strong></p>
     <p id="playerCountLabel" class="small"></p>
     <div id="playerList"></div>
@@ -108,7 +110,7 @@
     <div id="secretForCulprit" class="hidden">
       <p><strong>Bạn là thủ phạm. Chỉ bạn thấy phần này.</strong></p>
       <p id="myMissionLabel" class="msg"></p>
-      <label for="accompliceSelect">Mời riêng 1 người làm đồng bọn (không bắt buộc, chỉ mời được 1 lần)</label>
+      <label id="inviteLabel" for="accompliceSelect">Mời riêng 1 người làm đồng bọn (không bắt buộc, chỉ mời được 1 lần)</label>
       <select id="accompliceSelect"></select>
       <button id="inviteBtn">Gửi lời mời riêng</button>
       <p id="inviteStatus" class="small msg"></p>
@@ -162,7 +164,7 @@
     <button id="newGameBtn" class="secondary">Chơi ván mới (chủ phòng tạo phòng mới)</button>
   </div>
 
-  <p class="small">Game đã deploy trên GitHub Pages và kết nối Firebase Realtime Database. Mở link này trên mỗi điện thoại, nhập tên, tạo hoặc vào chung một phòng bằng mã phòng là chơi chung được.</p>
+  <p class="small">Chơi chung nhiều máy qua GitHub Pages và Firebase Realtime Database. Phòng có 5–10 người chơi thật, hoặc 2–4 người thì hệ thống thêm bot cho đủ 5 người khi bắt đầu.</p>
 </div>
 <script type="module" src="./app.js"></script>
 </body>

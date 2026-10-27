@@ -80,6 +80,31 @@ function generateMission(players, culpritUid) {
   };
 }
 
+// ---------- Bot fill (phòng 2-4 người) ----------
+// Bot chỉ được thêm khi bắt đầu ván, để đủ đúng 5 người. Bot là người chơi
+// thật trong phòng Firebase: có mặt trong danh sách người chơi, có thể là
+// thủ phạm / đồng bọn / người vô tội, trò chuyện và bỏ phiếu.
+// Mô phỏng bot chạy trên trình duyệt của CHỦ PHÒNG (host ghi tin nhắn và
+// phiếu của bot lên nhánh public). Nếu host ngắt kết nối, bot dừng theo.
+// Giới hạn đã biết, không có chuyển quyền chủ phòng ở v1 này.
+const BOT_NAME_POOL = ["An", "Bình", "Chi", "Dũng", "Hà", "Hương", "Khang", "Linh", "Minh", "Ngọc", "Phong", "Quân", "Thảo", "Tuấn", "Vy", "Đức", "Mai", "Nam", "Quỳnh"];
+function shuffled(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function pickBotNames(humanNames, count) {
+  const taken = new Set(humanNames.map((n) => String(n).trim().toLowerCase()));
+  return shuffled(BOT_NAME_POOL).filter((n) => !taken.has(n.toLowerCase())).slice(0, count);
+}
+let botRoles = { culpritUid: null, accompliceUid: null };
+let botChatSent = false;
+let botVotesSent = false;
+let botReadySent = false;
+
 function tallyVotes(votes) {
   const counts = {};
   Object.values(votes || {}).forEach((suspectUid) => {
@@ -149,11 +174,19 @@ function renderPublic() {
   $("phaseLabel").textContent = PHASE_LABELS[publicState.phase] || publicState.phase || "";
   $("myNameLabel").textContent = myName;
   const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
-  $("playerCountLabel").textContent = `Đã có ${players.length} / 10 người chơi. Cần từ 5 người mới bắt đầu được.`;
+  if (publicState.phase === "lobby") {
+    $("playerCountLabel").textContent = `Đã có ${players.length} người chơi thật. Cần từ 2 người mới bắt đầu được; nếu dưới 5 người, khi bắt đầu sẽ thêm bot cho đủ 5 người.`;
+  } else {
+    $("playerCountLabel").textContent = `Đã có ${players.length} / 10 người chơi.`;
+  }
+  $("botFillLabel").textContent = (publicState.botFill && publicState.botNames && publicState.botNames.length)
+    ? `Đã thêm ${publicState.botNames.length} bot cho đủ 5 người: ${publicState.botNames.join(", ")}`
+    : "";
   $("playerList").innerHTML = players.map((p) => {
     const tag = p.uid === myUid ? " (bạn)" : "";
+    const botTag = p.isBot ? " · Bot" : "";
     const alive = p.alive === false ? " · đã bị loại khỏi hiện trường (trong cốt truyện)" : "";
-    return `<span class="pill ${p.uid === myUid ? "me" : ""}">${esc(p.name)}${esc(tag)}${esc(alive)}</span>`;
+    return `<span class="pill ${p.uid === myUid ? "me" : ""}">${esc(p.name)}${esc(tag)}${esc(botTag)}${esc(alive)}</span>`;
   }).join(" ");
 
   const phase = publicState.phase;
@@ -163,10 +196,16 @@ function renderPublic() {
   show("revealCard", phase === "reveal");
 
   show("startBtn", isHost && phase === "lobby");
-  $("startBtn").disabled = players.length < 5;
-  $("startBtn").textContent = players.length < 5
-    ? `Bắt đầu ván chơi (cần từ 5 người, hiện có ${players.length})`
-    : "Bắt đầu ván chơi";
+  if (players.length < 2) {
+    $("startBtn").disabled = true;
+    $("startBtn").textContent = `Bắt đầu ván chơi (cần từ 2 người, hiện có ${players.length})`;
+  } else if (players.length < 5) {
+    $("startBtn").disabled = false;
+    $("startBtn").textContent = `Bắt đầu ván chơi (sẽ thêm ${5 - players.length} bot cho đủ 5 người)`;
+  } else {
+    $("startBtn").disabled = false;
+    $("startBtn").textContent = "Bắt đầu ván chơi";
+  }
 
   // Investigation
   if (phase === "investigation") {
@@ -213,6 +252,115 @@ function renderPublic() {
     const breakdown = Object.entries(r.voteCounts || {}).map(([uid, n]) => `${playerName(uid)}: ${n} phiếu`).join("\n");
     $("voteBreakdownLabel").textContent = breakdown ? `Chi tiết phiếu:\n${breakdown}` : "";
   }
+
+  // Bot fill: mô phỏng bot chỉ chạy trên trình duyệt của chủ phòng.
+  maybeBotHostActions();
+}
+
+// Khôi phục vai trò bot cho host (khi host tải lại trang giữa ván) từ node
+// riêng của chính host, vốn chứa assignments + accompliceUpdate.
+function reconstructBotRoles() {
+  if (myPrivate.assignments && myPrivate.assignments.culpritUid) {
+    botRoles.culpritUid = myPrivate.assignments.culpritUid;
+  }
+  if (myPrivate.accompliceUpdate && myPrivate.accompliceUpdate.accompliceUid) {
+    botRoles.accompliceUid = myPrivate.accompliceUpdate.accompliceUid;
+  }
+}
+
+async function maybeBotHostActions() {
+  if (!isHost || !publicState.botFill || !db || !roomCode) return;
+  reconstructBotRoles();
+  const phase = publicState.phase;
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  const culpritUid = botRoles.culpritUid;
+  if (phase === "secret" && culpritUid && players.some((p) => p.uid === culpritUid && p.isBot) && !publicState.secretReady && !botReadySent) {
+    botReadySent = true;
+    setTimeout(async () => { await update(publicRef(), { secretReady: true }); }, 1500);
+  }
+  if (phase === "investigation" && !botChatSent) {
+    botChatSent = true;
+    await sendBotChat();
+  }
+  if (phase === "vote" && !botVotesSent) {
+    botVotesSent = true;
+    await sendBotVotes();
+  }
+}
+
+// Tin nhắn bot: bàn về manh mối, đôi khi đánh lạc hướng, KHÔNG bao giờ
+// tiết lộ thủ phạm / đồng bọn là ai, KHÔNG tự nhận là thủ phạm, KHÔNG
+// tố cáo đúng thủ phạm. Đồng bọn chỉ nói chung chung để giảm nghi ngờ
+// và đổ lỗi cho một người vô tội, không nêu tên thủ phạm.
+async function sendBotChat() {
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  const bots = players.filter((p) => p.isBot && p.alive !== false);
+  if (!bots.length) return;
+  // Tránh gửi trùng nếu host tải lại trang giữa ván.
+  try {
+    const chatSnap = await get(ref(db, `rooms/${roomCode}/public/chat`));
+    const existing = chatSnap.val() || {};
+    if (Object.values(existing).some((m) => bots.some((b) => b.name === m.name))) return;
+  } catch (_) { /* vẫn gửi tiếp, lỗi đọc chat không chặn bot */ }
+  const culpritUid = botRoles.culpritUid;
+  const accompliceUid = botRoles.accompliceUid;
+  const innocents = players.filter((p) => p.alive !== false && p.uid !== culpritUid && p.uid !== accompliceUid);
+  const pickInnocentTarget = (selfUid) => {
+    const targets = innocents.filter((p) => p.uid !== selfUid);
+    return targets.length ? randomOf(targets) : null;
+  };
+  const messages = [];
+  bots.forEach((bot) => {
+    if (bot.uid === culpritUid) {
+      const t = pickInnocentTarget(bot.uid);
+      messages.push({ name: bot.name, text: t
+        ? `Mình cũng bất ngờ lắm, không biết ai làm nữa. Mà mình thấy ${t.name} lúc đó hơi lảng tránh, mọi người để ý xem sao.`
+        : "Mình cũng bất ngờ lắm, không biết ai làm nữa." });
+    } else if (bot.uid === accompliceUid) {
+      const t = pickInnocentTarget(bot.uid);
+      messages.push({ name: bot.name, text: t
+        ? `Đừng vội kết luận, có khi chỉ là hiểu lầm thôi. Mình thấy ${t.name} cứ nhắc tới hiện trường nhiều quá, hơi lạ.`
+        : "Đừng vội kết luận, có khi chỉ là hiểu lầm thôi." });
+    } else {
+      const t = pickInnocentTarget(bot.uid);
+      messages.push({ name: bot.name, text: t && Math.random() < 0.5
+        ? `Mình xem manh mối rồi, vẫn chưa chắc. ${t.name} lúc đó ở đâu nhỉ, mọi người hỏi thử xem.`
+        : "Mình xem manh mối rồi, vẫn chưa chắc chắn. Mọi người thấy điểm nào đáng ngờ nhất?" });
+    }
+  });
+  for (const m of shuffled(messages)) {
+    await push(ref(db, `rooms/${roomCode}/public/chat`), { name: m.name, text: m.text, at: Date.now() });
+  }
+}
+
+// Phiếu bot: bot vô tội bỏ cho người khác ngẫu nhiên (không tự bỏ cho mình),
+// bot đồng bọn bỏ cho một người vô tội (không bỏ cho thủ phạm),
+// bot thủ phạm bỏ cho một người vô tội (không bỏ cho đồng bọn).
+async function sendBotVotes() {
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  const alive = players.filter((p) => p.alive !== false);
+  const bots = alive.filter((p) => p.isBot);
+  if (!bots.length) return;
+  let existingVotes = {};
+  try {
+    const votesSnap = await get(ref(db, `rooms/${roomCode}/public/votes`));
+    existingVotes = votesSnap.val() || {};
+  } catch (_) { /* vẫn gửi tiếp */ }
+  const culpritUid = botRoles.culpritUid;
+  const accompliceUid = botRoles.accompliceUid;
+  for (const bot of bots) {
+    if (existingVotes[bot.uid]) continue;
+    let targets;
+    if (bot.uid === culpritUid) {
+      targets = alive.filter((p) => p.uid !== bot.uid && p.uid !== accompliceUid);
+    } else if (bot.uid === accompliceUid) {
+      targets = alive.filter((p) => p.uid !== bot.uid && p.uid !== culpritUid);
+    } else {
+      targets = alive.filter((p) => p.uid !== bot.uid);
+    }
+    if (!targets.length) continue;
+    await set(ref(db, `rooms/${roomCode}/public/votes/${bot.uid}`), randomOf(targets).uid);
+  }
 }
 
 function renderPrivate() {
@@ -226,6 +374,18 @@ function renderPrivate() {
   const isAccomplice = myPrivate.role === "accomplice";
   show("secretForOthers", !isCulprit);
   show("secretForCulprit", isCulprit);
+  // Ván có bot: đồng bọn đã chọn ngẫu nhiên khi bắt đầu, nên ẩn phần mời
+  // riêng để không tạo thêm đồng bọn thứ hai.
+  if (publicState.botFill) {
+    show("inviteLabel", false);
+    show("accompliceSelect", false);
+    show("inviteBtn", false);
+    if (isCulprit) $("inviteStatus").textContent = "Ván có bot: đồng bọn (nếu có) đã được chọn ngẫu nhiên khi bắt đầu, bạn không cần mời.";
+  } else {
+    show("inviteLabel", true);
+    show("accompliceSelect", true);
+    show("inviteBtn", true);
+  }
   show("accompliceCard", isAccomplice);
   show("toInvestigationBtn", isHost);
 
@@ -301,39 +461,69 @@ $("joinBtn").addEventListener("click", async () => {
 
 $("startBtn").addEventListener("click", async () => {
   if (!isHost) return;
-  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
-  if (players.length < 5) { $("roomStatus").textContent = "Cần từ 5 người mới bắt đầu được."; return; }
+  const humans = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  if (humans.length < 2) {
+    $("roomStatus").textContent = "Cần từ 2 người mới bắt đầu được. Phòng chỉ có 1 người thì chưa bắt đầu được.";
+    return;
+  }
+  // Bot fill: 2 người -> +3 bot, 3 người -> +2 bot, 4 người -> +1 bot, 5-10 người -> không bot.
+  const botsNeeded = humans.length < 5 ? 5 - humans.length : 0;
+  const botFill = botsNeeded > 0;
+  const botNames = botFill ? pickBotNames(humans.map((p) => p.name), botsNeeded) : [];
+  const botPlayers = botNames.map((name, i) => ({ uid: `bot${i + 1}`, name, isBot: true, alive: true }));
+  const players = [...humans, ...botPlayers];
   const culprit = randomOf(players);
   const mission = generateMission(players, culprit.uid);
+  // Ván có bot: đồng bọn chọn ngẫu nhiên 50% khi bắt đầu (thay cho mời riêng,
+  // vì host không được đọc node riêng của người khác để mô phỏng mời/đồng ý).
+  // Ván không bot: giữ nguyên luồng mời riêng / đồng ý như cũ.
+  let accompliceUid = null;
+  let accompliceName = null;
+  if (botFill && Math.random() < 0.5) {
+    const cand = randomOf(players.filter((p) => p.uid !== culprit.uid));
+    accompliceUid = cand.uid;
+    accompliceName = cand.name;
+  }
+  botRoles = { culpritUid: culprit.uid, accompliceUid };
+  botChatSent = false;
+  botVotesSent = false;
+  botReadySent = false;
 
   // Đánh dấu nạn nhân (nếu nhiệm vụ là loại người chơi) là không còn bỏ phiếu.
   const playerUpdates = {};
-  players.forEach((p) => { playerUpdates[p.uid] = { name: p.name, alive: !(mission.type === "eliminate" && mission.victimUid === p.uid) }; });
+  players.forEach((p) => { playerUpdates[p.uid] = { name: p.name, alive: !(mission.type === "eliminate" && mission.victimUid === p.uid), isBot: Boolean(p.isBot) }; });
   await update(ref(db, `rooms/${roomCode}/public/players`), playerUpdates);
 
   await update(publicRef(), {
     phase: "secret", scene: mission.scene, clues: mission.clues, secretReady: false,
     votes: null, chat: null, reveal: null, missionTypeLabel: mission.typeLabel,
+    botFill, botCount: botsNeeded, botNames,
   });
 
   // Vai trò riêng tư: mỗi người chỉ đọc được node của chính mình (xem Rules trong README).
   // Bản sao assignments nằm chung trong node riêng của chủ phòng, để cuối ván
   // chủ phòng đọc lại và công bố — và để tránh ghi đè lẫn nhau, mỗi người chỉ
   // được ghi đúng 1 lần ở đây, không ghi thêm node assignments riêng sau đó.
+  // Ghi node của bot là best-effort: nếu Rules chặn host ghi node của bot,
+  // mô phỏng bot vẫn chạy được từ assignments + accompliceUpdate của host
+  // và từ biến botRoles trong bộ nhớ của host.
   const writes = players.map((p) => {
-    const isCulprit = p.uid === culprit.uid;
     const data = {
-      role: isCulprit ? "culprit" : "innocent",
-      mission: isCulprit ? mission : null,
+      role: p.uid === culprit.uid ? "culprit" : (p.uid === accompliceUid ? "accomplice" : "innocent"),
+      mission: p.uid === culprit.uid ? mission : null,
       invite: null, inviteResponse: null, inviteSentTo: null, inviteAnswered: false,
     };
     if (p.uid === myUid) {
       data.assignments = { culpritUid: culprit.uid, culpritName: culprit.name, mission };
+      if (botFill && accompliceUid) data.accompliceUpdate = { accompliceUid, accompliceName };
     }
-    return set(ref(db, `rooms/${roomCode}/private/${p.uid}`), data);
+    const w = set(ref(db, `rooms/${roomCode}/private/${p.uid}`), data);
+    return p.isBot ? w.catch(() => null) : w;
   });
-  await Promise.all(writes);
-  $("roomStatus").textContent = "Đã bắt đầu. Thủ phạm đang nhận nhiệm vụ bí mật.";
+  await Promise.allSettled(writes);
+  $("roomStatus").textContent = botFill
+    ? `Đã bắt đầu. Đã thêm ${botsNeeded} bot cho đủ 5 người: ${botNames.join(", ")}. Thủ phạm đang nhận nhiệm vụ bí mật.`
+    : "Đã bắt đầu. Thủ phạm đang nhận nhiệm vụ bí mật.";
 });
 
 $("inviteBtn").addEventListener("click", async () => {
