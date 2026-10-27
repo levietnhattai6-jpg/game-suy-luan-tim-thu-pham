@@ -149,7 +149,6 @@ function pickBotNames(humanNames, count) {
   return shuffled(BOT_NAME_POOL).filter((n) => !taken.has(n.toLowerCase())).slice(0, count);
 }
 let botRoles = { culpritUid: null, accompliceUid: null };
-let botChatSent = false;
 let botVotesSent = false;
 let botReadySent = false;
 
@@ -225,6 +224,31 @@ const RIDDLES = [
   { objectId: "sofa", riddle: "🧩 Nơi ngồi kể chuyện, ghế êm và ấm." },
 ];
 function objectById(id) { return OBJECTS.find((o) => o.id === id); }
+// 5 simple tasks (GGD-style). Task objects already exist in OBJECTS.
+const TASKS = [
+  { id: "task_table", label: "Dọn bàn", objectId: "table_khach" },
+  { id: "task_plant", label: "Tưới cây", objectId: "plant_khach" },
+  { id: "task_lamp", label: "Sửa đèn", objectId: "lamp" },
+  { id: "task_books", label: "Xếp sách", objectId: "shelf" },
+  { id: "task_stove", label: "Kiểm tra bếp", objectId: "stove" },
+];
+function taskByObjectId(id) { return TASKS.find((t) => t.objectId === id); }
+function taskProgress() { return publicState.taskProgress || {}; }
+function tasksDoneCount() { return Object.keys(taskProgress()).length; }
+// Door-gap blocks used only while doors sabotage is active.
+const DOOR_BLOCKS = [
+  { x: 300, y: 550, w: 100, h: 12 }, { x: 1000, y: 550, w: 100, h: 12 }, { x: 1700, y: 550, w: 100, h: 12 },
+  { x: 300, y: 700, w: 100, h: 12 }, { x: 1000, y: 700, w: 100, h: 12 }, { x: 1700, y: 700, w: 100, h: 12 },
+  { x: 800, y: 200, w: 12, h: 100 }, { x: 1500, y: 200, w: 12, h: 100 },
+  { x: 700, y: 850, w: 12, h: 100 }, { x: 1350, y: 850, w: 12, h: 100 },
+];
+function sabotageActive() {
+  const s = publicState.sabotage;
+  if (!s || !s.until) return null;
+  if (Date.now() > s.until) return null;
+  return s;
+}
+let lastKillAt = 0, lastSabotageAt = 0, botTaskAt = 0;
 let myPos = null, movePositions = {}, moveTraces = {}, myClues = [], myCollectedIds = [];
 let moveLoopOn = false, lastMoveTick = 0, lastPosSync = 0, posSpawned = false, posAttached = false;
 let keysDown = {}, joyVec = { x: 0, y: 0 }, walkPhase = 0;
@@ -266,7 +290,23 @@ function nearestObject() {
 }
 function hitsWall(x, y) {
   const r = 20;
-  return WALLS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h);
+  if (WALLS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h)) return true;
+  const sab = sabotageActive();
+  if (sab && sab.type === "doors") {
+    if (DOOR_BLOCKS.some((w) => x + r > w.x && x - r < w.x + w.w && y + r > w.y && y - r < w.y + w.h)) return true;
+  }
+  return false;
+}
+function isDuckRole(role) { return role === "culprit" || role === "accomplice"; }
+function duckUidsFromHost() {
+  const out = [];
+  if (botRoles.culpritUid) out.push(botRoles.culpritUid);
+  if (botRoles.accompliceUid) out.push(botRoles.accompliceUid);
+  return out;
+}
+function dodoUidFromHost() {
+  if (myPrivate.assignments && myPrivate.assignments.dodoUid) return myPrivate.assignments.dodoUid;
+  return null;
 }
 function tryMove(x, y) {
   // axis-separated so door gaps stay passable
@@ -286,6 +326,7 @@ function attachPositions() {
   posAttached = true;
   onValue(ref(db, `rooms/${roomCode}/public/positions`), (snap) => {
     movePositions = snap.val() || {};
+    updateVoiceVolumes();
     if (!posSpawned && myUid && !movePositions[myUid]) {
       const uids = publicState.players ? Object.keys(publicState.players) : [myUid];
       const idx = Math.max(0, uids.indexOf(myUid));
@@ -343,6 +384,64 @@ function drawCapyCanvas(ctx, x, y, key, name, isBot, ghost, isMe, moving) {
   if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 2, 36, 0, Math.PI * 2); ctx.stroke(); }
   ctx.restore();
 }
+function nearestPlayer(maxDist) {
+  if (!myPos) return null;
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  let best = null, bestD = maxDist;
+  players.forEach((p) => {
+    if (p.uid === myUid || p.alive === false) return;
+    const pos = movePositions[p.uid]; if (!pos) return;
+    const d = Math.hypot(pos.x - myPos.x, pos.y - myPos.y);
+    if (d < bestD) { bestD = d; best = { player: p, dist: d }; }
+  });
+  return best;
+}
+function nearestBody(maxDist) {
+  if (!myPos) return null;
+  const bodies = publicState.bodies || {};
+  let best = null, bestD = maxDist;
+  Object.entries(bodies).forEach(([uid, b]) => {
+    if (!b) return;
+    const d = Math.hypot(b.x - myPos.x, b.y - myPos.y);
+    if (d < bestD) { bestD = d; best = { uid, body: b, dist: d }; }
+  });
+  return best;
+}
+function updateActionButtons() {
+  const meAlive = !publicState.players || !publicState.players[myUid] || publicState.players[myUid].alive !== false;
+  const killBtn = $("killBtn"), reportBtn = $("reportBtn"), slBtn = $("sabotageLightsBtn"), sdBtn = $("sabotageDoorsBtn");
+  if (!meAlive || publicState.phase !== "investigation") {
+    if (killBtn) show("killBtn", false);
+    if (reportBtn) show("reportBtn", false);
+    if (slBtn) show("sabotageLightsBtn", false);
+    if (sdBtn) show("sabotageDoorsBtn", false);
+    return;
+  }
+  const isDuck = isDuckRole(myPrivate.role);
+  if (killBtn) {
+    const near = isDuck ? nearestPlayer(100) : null;
+    const cd = Math.max(0, Math.ceil((20000 - (Date.now() - lastKillAt)) / 1000));
+    show("killBtn", !!near);
+    if (near) killBtn.textContent = cd > 0 ? `🔪 Loại ${near.player.name} (hồi ${cd}s)` : `🔪 Loại ${near.player.name}`;
+    killBtn.disabled = cd > 0;
+  }
+  if (reportBtn) {
+    const nearB = nearestBody(100);
+    show("reportBtn", !!nearB);
+  }
+  if (slBtn) {
+    const cd = Math.max(0, Math.ceil((30000 - (Date.now() - lastSabotageAt)) / 1000));
+    show("sabotageLightsBtn", isDuck);
+    slBtn.textContent = cd > 0 ? `💡 Tắt đèn (hồi ${cd}s)` : "💡 Tắt đèn (phá hoại)";
+    slBtn.disabled = cd > 0;
+  }
+  if (sdBtn) {
+    const cd = Math.max(0, Math.ceil((30000 - (Date.now() - lastSabotageAt)) / 1000));
+    show("sabotageDoorsBtn", isDuck);
+    sdBtn.textContent = cd > 0 ? `🔒 Khóa cửa (hồi ${cd}s)` : "🔒 Khóa cửa (phá hoại)";
+    sdBtn.disabled = cd > 0;
+  }
+}
 function drawMovement() {
   const canvas = $("moveCanvas"); if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -383,6 +482,14 @@ function drawMovement() {
     ctx.font = "bold 13px system-ui"; ctx.fillStyle = "#111827"; ctx.textAlign = "center";
     ctx.fillText(o.name, sx + o.w / 2, sy + o.h / 2 + 5);
   });
+  // Bodies on the map (killed players): ghost capybara + red mark.
+  const bodies = publicState.bodies || {};
+  Object.entries(bodies).forEach(([uid, b]) => {
+    if (!b) return;
+    ctx.fillStyle = "rgba(220,38,38,.9)"; ctx.beginPath(); ctx.arc(b.x - camX, b.y - camY - 34, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px system-ui"; ctx.textAlign = "center"; ctx.fillText("X", b.x - camX, b.y - camY - 28);
+    drawCapyCanvas(ctx, b.x - camX, b.y - camY, uid, (b.name || "Xác") + " (xác)", false, true, false, false);
+  });
   // Characters
   const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
   players.forEach((p) => {
@@ -390,6 +497,21 @@ function drawMovement() {
     const moving = p.uid === myUid && (keysDown["w"] || keysDown["a"] || keysDown["s"] || keysDown["d"] || joyVec.x !== 0 || joyVec.y !== 0);
     drawCapyCanvas(ctx, pos.x - camX, pos.y - camY, p.uid, p.name, !!p.isBot, p.alive === false, p.uid === myUid, moving);
   });
+  // Lights-off sabotage: innocents see only a small circle around themselves; ducks see normally.
+  const sabNow = sabotageActive();
+  if (sabNow && sabNow.type === "lights" && myPrivate.role !== "culprit" && myPrivate.role !== "accomplice" && myPos) {
+    ctx.fillStyle = "rgba(0,0,0,.82)";
+    ctx.beginPath(); ctx.rect(0, 0, VIEW_W, VIEW_H);
+    const px = myPos.x - camX, py = myPos.y - camY;
+    ctx.arc(px, py, 130, 0, Math.PI * 2, true);
+    ctx.fill("evenodd");
+  }
+  // Sabotage banner (drawn as DOM status below, plus canvas label)
+  if (sabNow) {
+    ctx.font = "bold 20px system-ui"; ctx.fillStyle = sabNow.type === "lights" ? "#facc15" : "#fca5a5"; ctx.textAlign = "center";
+    ctx.fillText(sabNow.type === "lights" ? "⚠️ ĐÈN ĐÃ TẮT — chỉ nhìn gần được" : "🔒 CỬA ĐÃ KHÓA — không qua được cửa", VIEW_W / 2, 30);
+  }
+  updateActionButtons();
   const btn = $("traceActionBtn");
   if (nearObj && btn) {
     show("traceActionBtn", true);
@@ -401,6 +523,8 @@ function moveTick(ts) {
   if (!moveLoopOn) return;
   requestAnimationFrame(moveTick);
   if (!myPos) { drawMovement(); return; }
+  const meDead = publicState.players && publicState.players[myUid] && publicState.players[myUid].alive === false;
+  if (meDead) { drawMovement(); return; }
   const dt = Math.min(0.05, (ts - lastMoveTick) / 1000 || 0.016); lastMoveTick = ts;
   let vx = 0, vy = 0;
   if (keysDown["w"] || keysDown["arrowup"]) vy -= 1;
@@ -441,6 +565,20 @@ function startBotWander() {
   };
   setInterval(async () => {
     if (!isHost || publicState.phase !== "investigation" || !publicState.botFill) return;
+    // Bots do tasks slowly: an alive innocent bot completes one incomplete task every ~30s. Duck bots never count.
+    if (Date.now() - botTaskAt > 30000) {
+      botTaskAt = Date.now();
+      try {
+        const tpSnap = await get(ref(db, `rooms/${roomCode}/public/taskProgress`));
+        const tp = tpSnap.val() || {};
+        const remaining = TASKS.filter((t) => !tp[t.id]);
+        const playersNow = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+        const innocentBots = playersNow.filter((p) => p.isBot && p.alive !== false && p.uid !== botRoles.culpritUid && p.uid !== botRoles.accompliceUid);
+        if (remaining.length && innocentBots.length) {
+          await update(publicRef(), { [`taskProgress/${remaining[0].id}`]: true });
+        }
+      } catch (_) {}
+    }
     const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
     const bots = players.filter((p) => p.isBot && p.alive !== false);
     for (const b of bots) {
@@ -500,6 +638,7 @@ function myPrivateRef() { return ref(db, `rooms/${roomCode}/private/${myUid}`); 
 function playerName(uid) { return (publicState.players && publicState.players[uid] && publicState.players[uid].name) || uid; }
 
 async function attachListeners() {
+  setupVoice();
   onValue(publicRef(), (snap) => {
     publicState = snap.val() || {};
     hostUid = publicState.hostUid || "";
@@ -553,26 +692,41 @@ function renderPublic() {
 
   // Movement phase (prototype, replaces old text investigation cards)
   if (phase === "investigation") {
-    attachChat();
+    maybeVoicePeers();
+    updateVoiceVolumes();
+    updateSysNotices();
     startMovement();
     $("sceneLabel").textContent = publicState.scene || "Hãy giải câu đố trong Sổ manh mối rồi đi tìm đúng đồ vật.";
     if (myPrivate.role === "culprit") {
-      $("roleHud").textContent = "🎭 Bạn là THỦ PHẠM — tìm dấu vết trước người khác và giấu nó đi!";
-      $("missionHud").textContent = myPrivate.mission ? `Nhiệm vụ của bạn: ${myPrivate.mission.typeLabel} — ${myPrivate.mission.detail}` : "";
+      $("roleHud").textContent = "🦆 Bạn là VỊT XẤU (thủ phạm) — giả dạng capybara, tìm dấu vết để giấu, loại người khi có cơ hội, phá hoại khi cần.";
+      $("missionHud").textContent = myPrivate.mission ? `Nhiệm vụ bí mật: ${myPrivate.mission.typeLabel} — ${myPrivate.mission.detail}` : "";
     } else if (myPrivate.role === "accomplice") {
-      $("roleHud").textContent = "🤝 Bạn là ĐỒNG BỌN — chỉ bạn và thủ phạm biết. Giúp đánh lạc hướng.";
+      $("roleHud").textContent = "🦆 Bạn là VỊT ĐỒNG BỌN — chỉ bạn và thủ phạm biết. Giúp đánh lạc hướng.";
+      $("missionHud").textContent = "";
+    } else if (myPrivate.role === "dodo") {
+      $("roleHud").textContent = "🐦 Bạn là DODO — bạn thắng NGAY nếu bị bỏ phiếu loại ra trong họp. Hãy tỏ ra đáng ngờ vừa đủ.";
       $("missionHud").textContent = "";
     } else {
-      $("roleHud").textContent = "🔍 Bạn là NGƯỜI VÔ TỘI — giải câu đố, đi tìm dấu vết trong đồ vật.";
-      $("missionHud").textContent = publicState.scene || "";
+      $("roleHud").textContent = "🦫 Bạn là CAPYBARA TỐT — làm 5 nhiệm vụ, giải câu đố, đi tìm dấu vết trong đồ vật.";
+      $("missionHud").textContent = `Nhiệm vụ: ${tasksDoneCount()} / 5 đã xong. ${publicState.scene || ""}`;
     }
+    const sabSt = sabotageActive();
+    if (sabSt) $("missionHud").textContent += sabSt.type === "lights" ? " ⚠️ Đèn đang tắt!" : " 🔒 Cửa đang khóa!";
     renderNotebook();
+    renderMissionBar();
+    updateSysNotices();
     show("toVoteBtn", isHost);
     if (isHost) startBotWander();
   }
 
-  // Vote
+  // Task win (host only): all 5 tasks done -> innocents win immediately.
+  if (phase === "investigation" && isHost && tasksDoneCount() >= 5 && !publicState.reveal) {
+    doFinalReveal({ innocentWin: true, duckWin: false, dodoWin: false, winReason: "tasks", tie: false, accusedUid: null, accusedName: null, voteCounts: {} });
+  }
+  // Vote (meeting): full voice volume for alive players.
   if (phase === "vote") {
+    updateVoiceVolumes();
+    updateSysNotices();
     const alivePlayers = players.filter((p) => p.alive !== false && p.uid !== myUid);
     $("voteList").innerHTML = alivePlayers.map((p) => (
       `<button class="vote-btn ${myVote === p.uid ? "selected" : ""}" data-vote="${esc(p.uid)}">${capySVG(p.uid || p.name)}<span>${esc(p.name)}${p.isBot ? " · BOT" : ""}</span></button>`
@@ -593,16 +747,28 @@ function renderPublic() {
   // Reveal
   if (phase === "reveal" && publicState.reveal) {
     const r = publicState.reveal;
-    $("revealCard").classList.toggle("win-good", !!r.innocentWin);
-    $("revealCard").classList.toggle("win-bad", !r.innocentWin);
+    $("revealCard").classList.toggle("win-good", !!r.innocentWin || !!r.dodoWin);
+    $("revealCard").classList.toggle("win-bad", !r.innocentWin && !r.dodoWin);
     $("revealChars").innerHTML = `<div class="big"><div>${capySVG(r.culpritUid || r.culpritName)}</div><div class="cap">THỦ PHẠM<br>${esc(r.culpritName)}</div></div>` + (r.accompliceUid ? `<div class="mid"><div>${capySVG(r.accompliceUid)}</div><div class="cap">ĐỒNG BỌN<br>${esc(r.accompliceName || "")}</div></div>` : `<div class="mid"><div style="font-size:52px">—</div><div class="cap">Không có<br>đồng bọn</div></div>`);
-    $("resultLabel").textContent = r.innocentWin
-      ? "🎉 Phe người chơi vô tội THẮNG — vì người bị tố cáo đúng là thủ phạm."
-      : "😈 Phe thủ phạm THẮNG — vì người bị tố cáo không phải thủ phạm (là đồng bọn hoặc người vô tội), hoặc hòa phiếu.";
+    if (r.dodoWin) {
+      $("resultLabel").textContent = `🐦 DODO THẮNG — Dodo (${r.dodoName || r.accusedName || ""}) đã bị bỏ phiếu loại ra, đúng như điều kiện thắng của Dodo.`;
+    } else if (r.winReason === "tasks") {
+      $("resultLabel").textContent = "🎉 Phe CAPYBARA TỐT THẮNG — đã làm xong cả 5 nhiệm vụ!";
+    } else if (r.winReason === "ducksOutnumber") {
+      $("resultLabel").textContent = "🦆 Phe VỊT THẮNG — số Vịt còn sống đã đông bằng / đông hơn Capybara còn sống.";
+    } else if (r.winReason === "ducksEjected") {
+      $("resultLabel").textContent = "🎉 Phe CAPYBARA TỐT THẮNG — tất cả Vịt đã bị loại ra.";
+    } else {
+      $("resultLabel").textContent = r.innocentWin
+        ? "🎉 Phe người chơi vô tội THẮNG — vì người bị tố cáo đúng là thủ phạm."
+        : "😈 Phe thủ phạm THẮNG — vì người bị tố cáo không phải thủ phạm (là đồng bọn hoặc người vô tội), hoặc hòa phiếu.";
+    }
     $("revealDetailLabel").textContent = [
       `Người bị tố cáo: ${r.tie ? "Hòa phiếu — không có người bị tố cáo duy nhất" : r.accusedName}`,
       `Thủ phạm: ${r.culpritName}`,
-      `Đồng bọn: ${r.accompliceName || "Không có đồng bọn"}`,
+      `Đồng bọn (Vịt): ${r.accompliceName || "Không có đồng bọn"}`,
+      `Dodo: ${r.dodoName || "Không có Dodo ở ván này"}`,
+      `Lý do kết thúc: ${r.winReason || ""}`,
       `Nhiệm vụ bí mật: ${r.missionLabel} — ${r.missionDetail}`,
       `Hiện trường: ${r.scene}`,
     ].join("\n");
@@ -611,6 +777,8 @@ function renderPublic() {
   }
 
   // Bot fill: mô phỏng bot chỉ chạy trên trình duyệt của chủ phòng.
+  // Reset per-meeting vote state when back in movement, so a 2nd meeting works.
+  if (phase === "investigation") { botVotesSent = false; myVote = null; }
   maybeBotHostActions();
 }
 
@@ -635,58 +803,10 @@ async function maybeBotHostActions() {
     botReadySent = true;
     setTimeout(async () => { await update(publicRef(), { secretReady: true }); }, 1500);
   }
-  if (phase === "investigation" && !botChatSent) {
-    botChatSent = true;
-    await sendBotChat();
-  }
+  // Bots do not speak: no text chat and no voice for bots in this version.
   if (phase === "vote" && !botVotesSent) {
     botVotesSent = true;
     await sendBotVotes();
-  }
-}
-
-// Tin nhắn bot: bàn về manh mối, đôi khi đánh lạc hướng, KHÔNG bao giờ
-// tiết lộ thủ phạm / đồng bọn là ai, KHÔNG tự nhận là thủ phạm, KHÔNG
-// tố cáo đúng thủ phạm. Đồng bọn chỉ nói chung chung để giảm nghi ngờ
-// và đổ lỗi cho một người vô tội, không nêu tên thủ phạm.
-async function sendBotChat() {
-  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
-  const bots = players.filter((p) => p.isBot && p.alive !== false);
-  if (!bots.length) return;
-  // Tránh gửi trùng nếu host tải lại trang giữa ván.
-  try {
-    const chatSnap = await get(ref(db, `rooms/${roomCode}/public/chat`));
-    const existing = chatSnap.val() || {};
-    if (Object.values(existing).some((m) => bots.some((b) => b.name === m.name))) return;
-  } catch (_) { /* vẫn gửi tiếp, lỗi đọc chat không chặn bot */ }
-  const culpritUid = botRoles.culpritUid;
-  const accompliceUid = botRoles.accompliceUid;
-  const innocents = players.filter((p) => p.alive !== false && p.uid !== culpritUid && p.uid !== accompliceUid);
-  const pickInnocentTarget = (selfUid) => {
-    const targets = innocents.filter((p) => p.uid !== selfUid);
-    return targets.length ? randomOf(targets) : null;
-  };
-  const messages = [];
-  bots.forEach((bot) => {
-    if (bot.uid === culpritUid) {
-      const t = pickInnocentTarget(bot.uid);
-      messages.push({ name: bot.name, text: t
-        ? `Mình cũng bất ngờ lắm, không biết ai làm nữa. Mà mình thấy ${t.name} lúc đó hơi lảng tránh, mọi người để ý xem sao.`
-        : "Mình cũng bất ngờ lắm, không biết ai làm nữa." });
-    } else if (bot.uid === accompliceUid) {
-      const t = pickInnocentTarget(bot.uid);
-      messages.push({ name: bot.name, text: t
-        ? `Đừng vội kết luận, có khi chỉ là hiểu lầm thôi. Mình thấy ${t.name} cứ nhắc tới hiện trường nhiều quá, hơi lạ.`
-        : "Đừng vội kết luận, có khi chỉ là hiểu lầm thôi." });
-    } else {
-      const t = pickInnocentTarget(bot.uid);
-      messages.push({ name: bot.name, text: t && Math.random() < 0.5
-        ? `Mình xem manh mối rồi, vẫn chưa chắc. ${t.name} lúc đó ở đâu nhỉ, mọi người hỏi thử xem.`
-        : "Mình xem manh mối rồi, vẫn chưa chắc chắn. Mọi người thấy điểm nào đáng ngờ nhất?" });
-    }
-  });
-  for (const m of shuffled(messages)) {
-    await push(ref(db, `rooms/${roomCode}/public/chat`), { name: m.name, text: m.text, at: Date.now() });
   }
 }
 
@@ -725,11 +845,14 @@ function renderPrivate() {
     show("secretForCulprit", false);
     show("inviteCard", false);
     show("accompliceCard", false);
+    show("dodoCard", false);
     return;
   }
   const isCulprit = myPrivate.role === "culprit";
   const isAccomplice = myPrivate.role === "accomplice";
-  show("secretForOthers", !isCulprit);
+  const isDodo = myPrivate.role === "dodo";
+  show("secretForOthers", !isCulprit && !isDodo);
+  show("dodoCard", isDodo);
   show("secretForCulprit", isCulprit);
   // Ván có bot: đồng bọn đã chọn ngẫu nhiên khi bắt đầu, nên ẩn phần mời
   // riêng để không tạo thêm đồng bọn thứ hai.
@@ -772,7 +895,7 @@ function renderPrivate() {
   }
 
   if (isAccomplice) {
-    $("accompliceLabel").textContent = `Bạn đang phối hợp với thủ phạm. Hãy đánh lạc hướng một cách hợp lý, đừng tự nhận mình là đồng bọn trong trò chuyện chung.`;
+    $("accompliceLabel").textContent = `Bạn đang phối hợp với thủ phạm. Hãy đánh lạc hướng một cách hợp lý, đừng tự nhận mình là đồng bọn khi nói bằng mic.`;
   }
 
   $("secretReadyLabel").textContent = publicState.secretReady
@@ -780,7 +903,292 @@ function renderPrivate() {
     : "";
 }
 
+
+// ---------- Voice chat (mic only, no text chat) ----------
+// Transport: WebRTC peer-to-peer audio. Firebase Realtime Database is used
+// ONLY as signalling, under rooms/{code}/voice/{targetUid}:
+//   offer/{fromUid}      = {type:"offer", sdp}
+//   answer/{fromUid}     = {type:"answer", sdp}
+//   candidates/{fromUid} = pushed ICE candidate objects
+// Signalling requires a Rules addition (see README): rooms/$roomCode/voice
+// with ".read": "auth != null" and ".write": "auth != null". Without it,
+// voice signalling writes are denied, while the rest of the game still works.
+// Audio is captured only after the user taps the mic button (browser gesture
+// + mic permission). Bots never speak: no peer connection is made to a bot.
+// Proximity: during movement, volume falls with map distance (full <300px,
+// silent >900px). During meetings/vote, alive players hear each other fully.
+// Dead players can still hear, but alive players cannot hear them.
+let localStream = null;
+let micOn = false;
+const voicePeers = new Map();
+const voiceBusy = new Set();
+const voiceLastOffer = new Map();
+const voiceLastAnswer = new Map();
+const voiceCandidateQueue = new Map();
+let voiceSignalAttached = false;
+
+function isBotUid(uid) { return String(uid || "").startsWith("bot"); }
+function voiceContainer() { return $("voiceAudios"); }
+function updateMicUI() {
+  const btn = $("micBtn");
+  if (!btn) return;
+  btn.classList.toggle("mic-on", micOn);
+  btn.classList.toggle("mic-off", !micOn);
+  btn.textContent = micOn ? "🎤 ĐANG NÓI — bấm để tắt mic" : "🎤 Tắt mic — bấm để nói";
+  const st = $("voiceStatus");
+  if (st) {
+    st.textContent = micOn
+      ? "Đang nói — người gần bạn nghe rõ, khi họp mọi người đều nghe rõ."
+      : "Mic đang tắt. Bấm nút mic để nói (trình duyệt sẽ hỏi quyền mic lần đầu).";
+  }
+}
+function proximityVolume(dist) {
+  if (dist < 300) return 1;
+  if (dist > 900) return 0;
+  return 1 - (dist - 300) / 600;
+}
+function updateVoiceVolumes() {
+  const container = voiceContainer();
+  if (!container) return;
+  const phase = publicState.phase;
+  const myAlive = !publicState.players || !publicState.players[myUid] || publicState.players[myUid].alive !== false;
+  container.querySelectorAll("audio").forEach((audio) => {
+    const uid = audio.dataset.uid;
+    if (!uid) return;
+    let vol = 1;
+    const speakerAlive = !publicState.players || !publicState.players[uid] || publicState.players[uid].alive !== false;
+    if (!myAlive) {
+      vol = 1; // Dead players (ghosts) can still hear everyone.
+    } else if (!speakerAlive) {
+      vol = 0; // Alive players cannot hear dead players.
+    } else if (phase === "investigation") {
+      const me = movePositions[myUid];
+      const other = movePositions[uid];
+      vol = (me && other) ? proximityVolume(Math.hypot(me.x - other.x, me.y - other.y)) : 0.5;
+    } else {
+      vol = 1; // Lobby / meeting / vote / reveal: full volume.
+    }
+    audio.volume = vol;
+  });
+}
+function createVoicePeer(targetUid) {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc.onicecandidate = (e) => {
+    if (e.candidate && db && roomCode) {
+      push(ref(db, `rooms/${roomCode}/voice/${targetUid}/candidates/${myUid}`), e.candidate.toJSON()).catch(() => {});
+    }
+  };
+  pc.ontrack = (e) => {
+    const container = voiceContainer();
+    if (!container) return;
+    let audio = container.querySelector(`audio[data-uid="${targetUid}"]`);
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.dataset.uid = targetUid;
+      audio.autoplay = true;
+      audio.playsInline = true;
+      container.appendChild(audio);
+    }
+    audio.srcObject = e.streams[0];
+    audio.play().catch(() => {});
+    updateVoiceVolumes();
+  };
+  pc.onnegotiationneeded = async () => {
+    if (!micOn || !db || !roomCode || pc.signalingState !== "stable") return;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await set(ref(db, `rooms/${roomCode}/voice/${targetUid}/offer/${myUid}`), { type: "offer", sdp: offer.sdp });
+    } catch (_) {}
+  };
+  if (localStream) localStream.getTracks().forEach((t) => { try { pc.addTrack(t, localStream); } catch (_) {} });
+  return pc;
+}
+async function flushVoiceCandidates(peerUid) {
+  const pc = voicePeers.get(peerUid);
+  if (!pc || !pc.remoteDescription) return;
+  const queued = voiceCandidateQueue.get(peerUid) || [];
+  voiceCandidateQueue.set(peerUid, []);
+  for (const cand of queued) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (_) {}
+  }
+}
+async function handleVoiceSignal(val) {
+  const sig = val || {};
+  for (const [fromUid, offer] of Object.entries(sig.offer || {})) {
+    if (fromUid === myUid || isBotUid(fromUid) || !offer || !offer.sdp) continue;
+    if (voiceLastOffer.get(fromUid) === offer.sdp) continue;
+    voiceLastOffer.set(fromUid, offer.sdp);
+    let pc = voicePeers.get(fromUid);
+    if (!pc) { pc = createVoicePeer(fromUid); voicePeers.set(fromUid, pc); }
+    try {
+      await pc.setRemoteDescription({ type: "offer", sdp: offer.sdp });
+      await flushVoiceCandidates(fromUid);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await set(ref(db, `rooms/${roomCode}/voice/${fromUid}/answer/${myUid}`), { type: "answer", sdp: answer.sdp });
+    } catch (_) {}
+  }
+  for (const [fromUid, answer] of Object.entries(sig.answer || {})) {
+    if (fromUid === myUid || isBotUid(fromUid) || !answer || !answer.sdp) continue;
+    if (voiceLastAnswer.get(fromUid) === answer.sdp) continue;
+    const pc = voicePeers.get(fromUid);
+    if (!pc) continue;
+    try {
+      if (pc.signalingState === "have-local-offer") {
+        voiceLastAnswer.set(fromUid, answer.sdp);
+        await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+        await flushVoiceCandidates(fromUid);
+      }
+    } catch (_) {}
+  }
+  for (const [fromUid, candMap] of Object.entries(sig.candidates || {})) {
+    if (fromUid === myUid || isBotUid(fromUid) || !candMap) continue;
+    const pc = voicePeers.get(fromUid);
+    for (const cand of Object.values(candMap)) {
+      if (!cand) continue;
+      if (pc && pc.remoteDescription) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (_) {}
+      } else {
+        const q = voiceCandidateQueue.get(fromUid) || [];
+        q.push(cand);
+        voiceCandidateQueue.set(fromUid, q);
+      }
+    }
+  }
+}
+function setupVoice() {
+  if (voiceSignalAttached || !db || !roomCode || !myUid) return;
+  voiceSignalAttached = true;
+  onValue(ref(db, `rooms/${roomCode}/voice/${myUid}`), (snap) => { handleVoiceSignal(snap.val() || {}); });
+}
+async function maybeVoicePeers() {
+  if (!db || !roomCode || !myUid) return;
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  for (const p of players) {
+    if (p.uid === myUid || isBotUid(p.uid)) continue;
+    // Deterministic initiator: the lower uid initiates, the higher waits.
+    // This avoids two offers crossing for the same pair.
+    if (myUid < p.uid && !voicePeers.has(p.uid) && !voiceBusy.has(p.uid)) {
+      voiceBusy.add(p.uid);
+      try {
+        const pc = createVoicePeer(p.uid);
+        voicePeers.set(p.uid, pc);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await set(ref(db, `rooms/${roomCode}/voice/${p.uid}/offer/${myUid}`), { type: "offer", sdp: offer.sdp });
+      } catch (_) {
+        voicePeers.delete(p.uid);
+      } finally {
+        voiceBusy.delete(p.uid);
+      }
+    }
+  }
+}
+async function toggleMic() {
+  const st = $("voiceStatus");
+  if (micOn) {
+    micOn = false;
+    if (localStream) localStream.getTracks().forEach((t) => { t.enabled = false; });
+    updateMicUI();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (st) st.textContent = "Thiết bị này không hỗ trợ mic trên trình duyệt. Hãy thử trình duyệt khác.";
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (_) {
+    if (st) st.textContent = "Bác chưa cho phép mic, bấm lại và chọn Cho phép";
+    micOn = false;
+    updateMicUI();
+    return;
+  }
+  localStream = stream;
+  micOn = true;
+  localStream.getTracks().forEach((t) => { t.enabled = true; });
+  // Add the mic track to every existing peer and renegotiate where stable.
+  for (const [targetUid, pc] of voicePeers.entries()) {
+    let added = false;
+    for (const track of localStream.getTracks()) {
+      if (!pc.getSenders().some((s) => s.track === track)) {
+        try { pc.addTrack(track, localStream); added = true; } catch (_) {}
+      }
+    }
+    if (added && pc.signalingState === "stable") {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await set(ref(db, `rooms/${roomCode}/voice/${targetUid}/offer/${myUid}`), { type: "offer", sdp: offer.sdp });
+      } catch (_) {}
+    }
+  }
+  updateMicUI();
+}
+
+// ---------- Mission bottom panel (large, long, collapsible) ----------
+// Wide bar at the BOTTOM of the movement screen (below the canvas, so it
+// never covers the joystick on the left or the action/meeting/mic buttons
+// on the right). Large text: role task, progress, collected clues, riddles.
+// Toggle collapses it to just the small toggle button; clues are kept in
+// memory (myCollectedIds / myClues) and re-rendered on expand.
+function renderMissionBar() {
+  const body = $("missionBarBody");
+  if (!body) return;
+  let roleText = "";
+  if (myPrivate.role === "culprit") {
+    roleText = myPrivate.mission
+      ? `🎭 Nhiệm vụ của bạn (THỦ PHẠM): ${myPrivate.mission.typeLabel} — ${myPrivate.mission.detail}`
+      : "🎭 Nhiệm vụ của bạn: THỦ PHẠM — tìm dấu vết trước người khác và giấu nó đi!";
+  } else if (myPrivate.role === "accomplice") {
+    roleText = "🤝 Nhiệm vụ của bạn: ĐỒNG BỌN — giúp thủ phạm đánh lạc hướng, đừng để lộ.";
+  } else {
+    roleText = "🔍 Nhiệm vụ của bạn: NGƯỜI VÔ TỘI — giải câu đố, đi tìm dấu vết trong đồ vật.";
+  }
+  $("missionBarRole").textContent = roleText;
+  const remaining = moveTraces ? Object.keys(moveTraces).length : 0;
+  const tp = taskProgress();
+  $("missionBarProgress").textContent = `Nhiệm vụ: ${tasksDoneCount()} / 5 đã xong. Tiến độ dấu vết: đã tìm ${myCollectedIds.length} / 6 — còn ${remaining} dấu vết trên bản đồ.`;
+  const taskHtml = TASKS.map((t) => `<li>${tp[t.id] ? "✅" : "⬜"} Nhiệm vụ: ${t.label} — ${tp[t.id] ? "Đã xong" : "Chưa xong"}</li>`).join("");
+  window.__taskHtml = taskHtml;
+  $("missionBarClues").innerHTML = (window.__taskHtml || "") + RIDDLES.map((r) => {
+    const idx = myCollectedIds.indexOf(r.objectId);
+    if (idx >= 0) {
+      const obj = objectById(r.objectId);
+      return `<li>✅ Đã tìm ở ${obj ? obj.room : ""}: ${esc(myClues[idx] || "")}</li>`;
+    }
+    return `<li>${esc(r.riddle)}</li>`;
+  }).join("");
+}
+function updateSysNotices() {
+  const box = $("sysNoticeBox");
+  if (!box) return;
+  const phase = publicState.phase;
+  if (phase === "vote") {
+    box.textContent = "Hệ thống: Đang họp — bấm mic ở trên để nói, tất cả người còn sống đều nghe rõ. Không còn chat chữ.";
+  } else if (phase === "investigation") {
+    box.textContent = "Hệ thống: Đang di chuyển — bấm mic ở trên để nói. Chỉ người ở gần bạn mới nghe rõ; người đã bị loại không nói được cho người còn sống nghe. Không còn chat chữ.";
+  } else if (phase === "reveal") {
+    box.textContent = "Hệ thống: Đã công bố kết quả. Không còn chat chữ — nói bằng mic nếu muốn bàn lại ván vừa rồi.";
+  } else {
+    box.textContent = "Hệ thống: Không còn chat chữ trong game này — trò chuyện bằng mic (bấm nút mic ở trên).";
+  }
+  if (publicState.meetingBy) {
+    box.textContent += ` Họp do ${publicState.meetingBy} gọi.`;
+  }
+}
+
 // ---------- Actions ----------
+if ($("micBtn")) $("micBtn").addEventListener("click", toggleMic);
+if ($("missionToggleBtn")) $("missionToggleBtn").addEventListener("click", () => {
+  const bar = $("missionBar");
+  if (!bar) return;
+  const collapsed = bar.classList.toggle("collapsed");
+  $("missionToggleBtn").textContent = collapsed ? "▲ Hiện nhiệm vụ & manh mối" : "▼ Ẩn nhiệm vụ & manh mối";
+  if (!collapsed) renderMissionBar();
+});
 $("createBtn").addEventListener("click", async () => {
   if (isPlaceholder || !myUid) return;
   myName = $("playerName").value.trim();
@@ -831,18 +1239,22 @@ $("startBtn").addEventListener("click", async () => {
   const players = [...humans, ...botPlayers];
   const culprit = randomOf(players);
   const mission = generateMission(players, culprit.uid);
-  // Ván có bot: đồng bọn chọn ngẫu nhiên 50% khi bắt đầu (thay cho mời riêng,
-  // vì host không được đọc node riêng của người khác để mô phỏng mời/đồng ý).
+  // Ván 5 người có bot: luôn có 1 đồng bọn Vịt (theo spec GGD: 1 thủ phạm + 1 đồng bọn).
   // Ván không bot: giữ nguyên luồng mời riêng / đồng ý như cũ.
   let accompliceUid = null;
   let accompliceName = null;
-  if (botFill && Math.random() < 0.5) {
+  if (botFill) {
     const cand = randomOf(players.filter((p) => p.uid !== culprit.uid));
     accompliceUid = cand.uid;
     accompliceName = cand.name;
   }
+  // Dodo: chỉ ở ván 6+ người (tổng số người chơi), chọn ngẫu nhiên ngoài thủ phạm/đồng bọn.
+  let dodoUid = null, dodoName = null;
+  if (players.length >= 6) {
+    const cand = randomOf(players.filter((p) => p.uid !== culprit.uid && p.uid !== accompliceUid));
+    if (cand) { dodoUid = cand.uid; dodoName = cand.name; }
+  }
   botRoles = { culpritUid: culprit.uid, accompliceUid };
-  botChatSent = false;
   botVotesSent = false;
   botReadySent = false;
 
@@ -868,13 +1280,13 @@ $("startBtn").addEventListener("click", async () => {
   // và từ biến botRoles trong bộ nhớ của host.
   const writes = players.map((p) => {
     const data = {
-      role: p.uid === culprit.uid ? "culprit" : (p.uid === accompliceUid ? "accomplice" : "innocent"),
+      role: p.uid === culprit.uid ? "culprit" : (p.uid === accompliceUid ? "accomplice" : (p.uid === dodoUid ? "dodo" : "innocent")),
       mission: p.uid === culprit.uid ? mission : null,
       invite: null, inviteResponse: null, inviteSentTo: null, inviteAnswered: false,
     };
     if (p.uid === myUid) {
-      data.assignments = { culpritUid: culprit.uid, culpritName: culprit.name, mission };
-      if (botFill && accompliceUid) data.accompliceUpdate = { accompliceUid, accompliceName };
+      data.assignments = { culpritUid: culprit.uid, culpritName: culprit.name, mission, dodoUid, dodoName };
+      if (accompliceUid) data.accompliceUpdate = { accompliceUid, accompliceName };
     }
     const w = set(ref(db, `rooms/${roomCode}/private/${p.uid}`), data);
     return p.isBot ? w.catch(() => null) : w;
@@ -968,6 +1380,22 @@ $("traceActionBtn").addEventListener("click", async () => {
   if (!obj || !db || !roomCode) return;
   const trace = (moveTraces || {})[obj.id];
   if (!trace) {
+    const task = taskByObjectId(obj.id);
+    const tp = taskProgress();
+    if (task && !tp[task.id]) {
+      if (isDuckRole(myPrivate.role)) {
+        $("moveStatus").textContent = `Bạn giả vờ làm nhiệm vụ: ${task.label}. Nhiệm vụ này KHÔNG được tính cho phe Capybara.`;
+        return;
+      }
+      if (myPrivate.role === "dodo") {
+        $("moveStatus").textContent = `Dodo cũng có thể làm nhiệm vụ cho vui, nhưng nhiệm vụ của Dodo không tính vào tiến độ thắng của Capybara.`;
+        return;
+      }
+      await update(publicRef(), { [`taskProgress/${task.id}`]: true }).catch(() => {});
+      $("moveStatus").textContent = `✅ Đã làm xong nhiệm vụ: ${task.label} (${tasksDoneCount() + 1} / 5).`;
+      renderMissionBar();
+      return;
+    }
     // Decoy: same interaction, funny "nothing here", object stays.
     const lines = ["Không có gì ở đây. Chỉ là đồ đạc bình thường thôi.", "Bạn lục kỹ rồi — ở đây sạch bong, không có dấu vết.", "Không có gì lạ ở đây cả. Thử câu đố khác xem."];
     $("moveStatus").textContent = lines[Math.floor(Math.random() * lines.length)];
@@ -984,36 +1412,114 @@ $("traceActionBtn").addEventListener("click", async () => {
     $("moveStatus").textContent = "Đã nhặt dấu vết, xem trong Sổ manh mối của bạn.";
   }
 });
+
+// ---------- GGD: kill / report / sabotage / meeting ejection / final win ----------
+$("killBtn").addEventListener("click", async () => {
+  const near = nearestPlayer(100);
+  if (!near || !isDuckRole(myPrivate.role) || Date.now() - lastKillAt < 20000) return;
+  lastKillAt = Date.now();
+  const victim = near.player;
+  const pos = movePositions[victim.uid] || myPos;
+  await update(ref(db, `rooms/${roomCode}/public/players/${victim.uid}`), { alive: false }).catch(() => {});
+  await set(ref(db, `rooms/${roomCode}/public/bodies/${victim.uid}`), { x: Math.round(pos.x), y: Math.round(pos.y), name: victim.name }).catch(() => {});
+  $("moveStatus").textContent = `Bạn đã loại ${victim.name} (trong cốt truyện). Xác còn nằm trên bản đồ — cẩn thận người khác báo xác!`;
+});
+$("reportBtn").addEventListener("click", async () => {
+  const nearB = nearestBody(100);
+  if (!nearB || !db || !roomCode) return;
+  await update(publicRef(), { phase: "vote", meetingBy: myName, meetingReason: "body", reportedBodyUid: nearB.uid }).catch(() => {});
+});
+$("sabotageLightsBtn").addEventListener("click", async () => {
+  if (!isDuckRole(myPrivate.role) || Date.now() - lastSabotageAt < 30000) return;
+  lastSabotageAt = Date.now();
+  await update(publicRef(), { sabotage: { type: "lights", until: Date.now() + 30000, by: myName } }).catch(() => {});
+  $("moveStatus").textContent = "Bạn đã tắt đèn 30 giây — người vô tội chỉ nhìn gần được.";
+});
+$("sabotageDoorsBtn").addEventListener("click", async () => {
+  if (!isDuckRole(myPrivate.role) || Date.now() - lastSabotageAt < 30000) return;
+  lastSabotageAt = Date.now();
+  await update(publicRef(), { sabotage: { type: "doors", until: Date.now() + 20000, by: myName } }).catch(() => {});
+  $("moveStatus").textContent = "Bạn đã khóa cửa 20 giây — không ai qua được cửa.";
+});
+$("skipVoteBtn").addEventListener("click", async () => {
+  myVote = "skip";
+  await set(ref(db, `rooms/${roomCode}/public/votes/${myUid}`), "skip");
+  renderPublic();
+});
+async function doFinalReveal(opts) {
+  // opts: {innocentWin, duckWin, dodoWin, winReason, tie, accusedUid, accusedName, voteCounts}
+  const assignSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/assignments`)).catch(() => null);
+  const accomSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/accompliceUpdate`)).catch(() => null);
+  const assign = (assignSnap && assignSnap.val()) || {};
+  const accom = (accomSnap && accomSnap.val()) || {};
+  const culpritUid = assign.culpritUid || botRoles.culpritUid;
+  const accompliceUid = accom.accompliceUid || botRoles.accompliceUid || null;
+  await update(publicRef(), {
+    phase: "reveal",
+    reveal: {
+      tie: !!opts.tie, accusedUid: opts.accusedUid || null, accusedName: opts.accusedName || null,
+      culpritUid, culpritName: assign.culpritName || playerName(culpritUid),
+      accompliceUid, accompliceName: accom.accompliceName || (accompliceUid ? playerName(accompliceUid) : null),
+      dodoUid: assign.dodoUid || null, dodoName: assign.dodoName || null,
+      missionLabel: assign.mission ? assign.mission.typeLabel : (publicState.missionTypeLabel || ""),
+      missionDetail: assign.mission ? assign.mission.detail : "",
+      scene: publicState.scene || (assign.mission ? assign.mission.scene : ""),
+      innocentWin: !!opts.innocentWin, duckWin: !!opts.duckWin, dodoWin: !!opts.dodoWin,
+      winReason: opts.winReason || "", voteCounts: opts.voteCounts || {},
+    },
+  });
+}
+async function doEjectAndCheckWin() {
+  // Host only: called from revealBtn (now "công bố người bị loại").
+  const votesSnap = await get(ref(db, `rooms/${roomCode}/public/votes`));
+  const votes = votesSnap.val() || {};
+  const t = tallyVotes(votes);
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  const aliveBefore = players.filter((p) => p.alive !== false);
+  // Tie or skip wins -> no ejection, back to movement.
+  if (t.tie || !t.accusedUid || t.accusedUid === "skip") {
+    await update(publicRef(), { phase: "investigation", votes: null, bodies: null, meetingBy: null, meetingReason: null, reportedBodyUid: null });
+    return;
+  }
+  const accusedUid = t.accusedUid;
+  const accusedName = playerName(accusedUid);
+  // Mark ejected as dead.
+  await update(ref(db, `rooms/${roomCode}/public/players/${accusedUid}`), { alive: false }).catch(() => {});
+  const assignSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/assignments`)).catch(() => null);
+  const accomSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/accompliceUpdate`)).catch(() => null);
+  const assign = (assignSnap && assignSnap.val()) || {};
+  const accom = (accomSnap && accomSnap.val()) || {};
+  const culpritUid = assign.culpritUid || botRoles.culpritUid;
+  const accompliceUid = accom.accompliceUid || botRoles.accompliceUid || null;
+  const dodoUid = assign.dodoUid || null;
+  // Dodo ejected -> Dodo wins immediately (unless that player was later invited as accomplice, then they count as a duck).
+  if (accusedUid === dodoUid && accusedUid !== accompliceUid) {
+    await doFinalReveal({ innocentWin: false, duckWin: false, dodoWin: true, winReason: "dodoEjected", tie: false, accusedUid, accusedName, voteCounts: t.counts });
+    return;
+  }
+  const aliveAfter = aliveBefore.filter((p) => p.uid !== accusedUid);
+  const ducksAlive = aliveAfter.filter((p) => p.uid === culpritUid || p.uid === accompliceUid);
+  const innocentsAlive = aliveAfter.filter((p) => p.uid !== culpritUid && p.uid !== accompliceUid);
+  if (ducksAlive.length === 0) {
+    await doFinalReveal({ innocentWin: true, duckWin: false, dodoWin: false, winReason: "ducksEjected", tie: false, accusedUid, accusedName, voteCounts: t.counts });
+    return;
+  }
+  if (ducksAlive.length >= innocentsAlive.length) {
+    await doFinalReveal({ innocentWin: false, duckWin: true, dodoWin: false, winReason: "ducksOutnumber", tie: false, accusedUid, accusedName, voteCounts: t.counts });
+    return;
+  }
+  // Game continues: back to movement, votes/bodies cleared.
+  await update(publicRef(), { phase: "investigation", votes: null, bodies: null, meetingBy: null, meetingReason: null, reportedBodyUid: null });
+  myVote = null;
+}
 $("meetingBtn").addEventListener("click", async () => {
   // Prototype route: any player may call a meeting. Public node is writable
   // by any authenticated player under the suggested Rules, so this works
   // without waiting for the host. Host-only button (toVoteBtn) still exists.
   if (!db || !roomCode) return;
-  await update(publicRef(), { phase: "vote", meetingBy: myName }).catch(() => {});
+  await update(publicRef(), { phase: "vote", meetingBy: myName, meetingReason: "emergency" }).catch(() => {});
 });
 
-$("sendChatBtn").addEventListener("click", async () => {
-  const text = $("chatInput").value.trim();
-  if (!text) return;
-  await push(ref(db, `rooms/${roomCode}/public/chat`), { name: myName, text, at: Date.now() });
-  $("chatInput").value = "";
-});
-
-// Chat hiển thị: theo dõi riêng để không vẽ lại toàn bộ phòng mỗi tin nhắn.
-let chatAttached = false;
-function attachChat() {
-  if (chatAttached || !db || !roomCode) return;
-  chatAttached = true;
-  onValue(ref(db, `rooms/${roomCode}/public/chat`), (snap) => {
-    const val = snap.val() || {};
-    $("chatBox").innerHTML = Object.values(val).map((m) => {
-      const plist = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
-      const sender = plist.find((p) => p.name === m.name);
-      return `<div class="chatline"><span style="width:36px;flex-shrink:0;display:inline-block">${capySVG(sender ? sender.uid : m.name)}</span><span class="bubble"><strong>${esc(m.name)}:</strong> ${esc(m.text)}</span></div>`;
-    }).join("");
-    $("chatBox").scrollTop = $("chatBox").scrollHeight;
-  });
-}
 $("toVoteBtn").addEventListener("click", async () => {
   if (!isHost) return;
   await update(publicRef(), { phase: "vote" });
@@ -1021,27 +1527,7 @@ $("toVoteBtn").addEventListener("click", async () => {
 
 $("revealBtn").addEventListener("click", async () => {
   if (!isHost) return;
-  const assignSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/assignments`));
-  const accomSnap = await get(ref(db, `rooms/${roomCode}/private/${myUid}/accompliceUpdate`));
-  const assign = assignSnap.val() || {};
-  const accom = accomSnap.val() || {};
-  const votesSnap = await get(ref(db, `rooms/${roomCode}/public/votes`));
-  const votes = votesSnap.val() || {};
-  const t = tallyVotes(votes);
-  const culpritUid = assign.culpritUid;
-  const innocentWin = Boolean(!t.tie && t.accusedUid && t.accusedUid === culpritUid);
-  await update(publicRef(), {
-    phase: "reveal",
-    reveal: {
-      tie: t.tie, accusedUid: t.accusedUid, accusedName: t.accusedUid ? playerName(t.accusedUid) : null,
-      culpritUid, culpritName: assign.culpritName || playerName(culpritUid),
-      accompliceUid: accom.accompliceUid || null, accompliceName: accom.accompliceName || null,
-      missionLabel: assign.mission ? assign.mission.typeLabel : (publicState.missionTypeLabel || ""),
-      missionDetail: assign.mission ? assign.mission.detail : "",
-      scene: publicState.scene || (assign.mission ? assign.mission.scene : ""),
-      innocentWin, voteCounts: t.counts,
-    },
-  });
+  await doEjectAndCheckWin();
 });
 
 $("newGameBtn").addEventListener("click", () => {

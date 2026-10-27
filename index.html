@@ -88,6 +88,18 @@
   .move-stage { box-shadow: 0 10px 24px rgba(0,0,0,.45); }
   #moveCanvas { image-rendering: auto; }
   .notebook li { font-size: 14px; margin: 4px 0; }
+
+  .voice-bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:#1e293b; color:#fff; border:3px solid #111827; border-radius:14px; padding:10px 12px; margin:10px 0; }
+  .voice-bar .small { color:#e2e8f0; }
+  .mic-btn { width:auto !important; min-width:190px; margin-top:0; }
+  .mic-btn.mic-off { background:#64748b; box-shadow:0 4px 0 #334155; }
+  .mic-btn.mic-on { background:#16a34a; box-shadow:0 4px 0 #166534; outline:3px solid #86efac; }
+  .sys-notice { font-size:14px; line-height:1.6; }
+  .mission-bar { background:linear-gradient(180deg,#fffbeb,#fef3c7); border:3px solid #d97706; border-radius:16px; padding:10px 12px; margin:12px 0; font-size:18px; line-height:1.65; box-shadow:0 6px 0 rgba(180,83,9,.25); }
+  .mission-bar.collapsed #missionBarBody { display:none; }
+  .mission-toggle { width:auto !important; margin-top:0; background:#b45309; box-shadow:0 4px 0 #78350f; }
+  .mission-bar ul { margin:6px 0; padding-left:20px; }
+  .mission-bar li { font-size:17px; }
 </style>
 <script>
   // Firebase config for project game-d76d1, wired from the user's Firebase
@@ -135,7 +147,11 @@
       <li><strong>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</strong></li>
       <li><strong>Luật thắng — quan trọng nhất: CHỈ khi người bị tố cáo đúng là thủ phạm thì phe người chơi vô tội mới thắng. Nếu người bị tố cáo là đồng bọn HOẶC là người vô tội thì phe thủ phạm (thủ phạm + đồng bọn nếu có) thắng.</strong> Sau đó game công bố toàn bộ vai trò, nhiệm vụ và đồng bọn.</li>
       <li>Không quảng cáo, không tiền thật, không giải thưởng.</li>
-      <li><strong>Thêm bot cho đủ người:</strong> phòng chỉ có 2–4 người vẫn bắt đầu được, hệ thống sẽ thêm bot cho đủ 5 người. Bot có thể là thủ phạm, đồng bọn hoặc người vô tội, trò chuyện và bỏ phiếu như người chơi. Phòng chỉ có 1 người thì không bắt đầu được.</li>
+      <li><strong>Vai trò kiểu Goose Goose Duck (capybara thay ngỗng):</strong> Capybara tốt làm nhiệm vụ, Vịt xấu trà trộn (1 thủ phạm + 1 đồng bọn Vịt trong ván 5 người), Dodo chỉ có ở ván 6+ người và thắng ngay nếu bị bỏ phiếu loại. Vịt giả dạng capybara trên bản đồ, chỉ lộ ra khi bị loại hoặc khi ván kết thúc.</li>
+      <li><strong>Nhiệm vụ:</strong> Capybara tốt có 5 nhiệm vụ đơn giản trên bản đồ (dọn bàn, tưới cây, sửa đèn, xếp sách, kiểm tra bếp). Làm xong cả 5 thì phe Capybara thắng. Vịt giả vờ làm nhiệm vụ không được tính.</li>
+      <li><strong>Giết / phá hoại / báo xác:</strong> Vịt đứng gần người còn sống sẽ có nút Loại (hồi 20 giây). Người bị loại thành xác trên bản đồ, ai đi gần xác sẽ có nút Báo xác để họp. Vịt còn có nút Tắt đèn (bản đồ tối 30 giây cho người vô tội) và Khóa cửa (cửa đóng 20 giây).</li>
+      <li><strong>Họp và loại người:</strong> Họp xong bỏ phiếu loại 1 người (hoặc bỏ qua). Ván KHÔNG kết thúc sau 1 lần loại, trừ khi Dodo bị loại (Dodo thắng ngay), hết Vịt (Capybara thắng), hoặc Vịt đông bằng / đông hơn Capybara còn sống (Vịt thắng).</li>
+      <li><strong>Thêm bot cho đủ người:</strong> phòng chỉ có 2–4 người vẫn bắt đầu được, hệ thống sẽ thêm bot cho đủ 5 người. Bot có thể là thủ phạm, đồng bọn hoặc người vô tội, nói bằng mic và bỏ phiếu như người chơi. Phòng chỉ có 1 người thì không bắt đầu được.</li>
     </ul>
   </div>
 
@@ -162,6 +178,14 @@
     <div id="playerList"></div>
     <button id="startBtn" class="hidden">Bắt đầu ván chơi (cần từ 5 người)</button>
     <p id="roomStatus" class="small msg"></p>
+
+    <div class="voice-bar">
+      <div><strong>🎙️ Trò chuyện bằng mic</strong> <span class="small">— không còn chat chữ. Bấm mic để nói, bấm lại để tắt.</span></div>
+      <button id="micBtn" class="mic-btn mic-off" type="button">🎤 Tắt mic — bấm để nói</button>
+      <span id="voiceStatus" class="small">Mic đang tắt. Bấm nút mic để nói (trình duyệt sẽ hỏi quyền mic lần đầu).</span>
+      <div id="voiceAudios" aria-hidden="true"></div>
+    </div>
+
   </div>
 
   <!-- SECRET PHASE -->
@@ -189,6 +213,10 @@
       </div>
       <p id="inviteDecisionLabel" class="small msg"></p>
     </div>
+    <div id="dodoCard" class="hidden">
+      <p><strong>Bạn là DODO. Chỉ bạn biết điều này.</strong></p>
+      <p>Bạn thắng NGAY nếu bị bỏ phiếu loại ra trong một cuộc họp. Đừng để lộ quá rõ, nhưng hãy tỏ ra đáng ngờ một cách hợp lý.</p>
+    </div>
     <div id="accompliceCard" class="hidden">
       <p><strong>Bạn là đồng bọn. Chỉ bạn và thủ phạm biết điều này.</strong></p>
       <p id="accompliceLabel" class="msg"></p>
@@ -207,6 +235,19 @@
       <canvas id="moveCanvas" width="960" height="540"></canvas>
       <div id="joyBase" class="joy-base"><div id="joyKnob" class="joy-knob"></div></div>
       <button id="traceActionBtn" class="move-action hidden">🔍 Xem dấu vết</button>
+      <button id="killBtn" class="move-action hidden" style="bottom:74px;background:#dc2626;box-shadow:0 4px 0 #991b1b;">🔪 Loại người gần bạn</button>
+      <button id="reportBtn" class="move-action hidden" style="bottom:134px;background:#f59e0b;box-shadow:0 4px 0 #92400e;">📣 Báo xác</button>
+      <button id="sabotageLightsBtn" class="move-action hidden" style="bottom:194px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">💡 Tắt đèn (phá hoại)</button>
+      <button id="sabotageDoorsBtn" class="move-action hidden" style="bottom:254px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">🔒 Khóa cửa (phá hoại)</button>
+    </div>
+    
+    <div id="missionBar" class="mission-bar">
+      <button id="missionToggleBtn" class="mission-toggle" type="button">▼ Ẩn nhiệm vụ &amp; manh mối</button>
+      <div id="missionBarBody">
+        <div id="missionBarRole" class="msg"></div>
+        <div id="missionBarProgress" class="small"></div>
+        <ul id="missionBarClues"></ul>
+      </div>
     </div>
     <p id="moveStatus" class="small msg"></p>
     <button id="meetingBtn">🚨 Họp khẩn — chuyển sang bỏ phiếu</button>
@@ -215,13 +256,10 @@
       <strong>📓 Sổ manh mối của bạn — câu đố gợi ý (đọc rồi đi tìm đúng đồ vật)</strong>
       <ul id="notebookList"><li class="small">Đang tải câu đố…</li></ul>
     </div>
-    <div class="chat-col">
-    <h3>Trò chuyện trong game</h3>
-    <div id="chatBox" class="chatbox"></div>
-    <div id="moveChatBox" class="chatbox hidden"></div>
-    <label for="chatInput">Nhắn cho cả phòng (không nhắn vai trò bí mật của bạn)</label>
-    <input id="chatInput" maxlength="200" placeholder="Bạn thấy manh mối nào đáng ngờ?">
-    <button id="sendChatBtn" class="secondary">Gửi tin nhắn</button>
+    <div class="voice-col">
+    <h3>🎙️ Nói bằng mic — không còn chat chữ</h3>
+    <p class="small">Bấm nút mic ở trên để nói. Khi di chuyển, chỉ người ở gần bạn mới nghe rõ; khi họp, tất cả người còn sống đều nghe rõ. Người đã bị loại không nói được cho người còn sống nghe.</p>
+    <div id="sysNoticeBox" class="chatbox sys-notice">Hệ thống: chưa có thông báo.</div>
     </div>
     </div>
     <button id="toVoteBtn" class="hidden">Chủ phòng: chuyển sang bỏ phiếu</button>
@@ -233,8 +271,9 @@
     <p>Chọn <strong>1 người</strong> bạn cho là thủ phạm. Nhớ luật: chỉ tố cáo đúng thủ phạm thì phe vô tội mới thắng. Tố cáo trúng đồng bọn cũng tính là phe thủ phạm thắng.</p>
     <p>Luật hòa phiếu: nếu có từ 2 người trở lên cùng cao phiếu nhất thì phe thủ phạm thắng.</p>
     <div id="voteList" class="vote-grid"></div>
+    <button id="skipVoteBtn" class="secondary">Bỏ qua — không loại ai ở cuộc họp này</button>
     <p id="voteStatus" class="small msg"></p>
-    <button id="revealBtn" class="hidden">Chủ phòng: công bố kết quả</button>
+    <button id="revealBtn" class="hidden">Chủ phòng: công bố người bị loại</button>
   </div>
 
   <!-- REVEAL -->
