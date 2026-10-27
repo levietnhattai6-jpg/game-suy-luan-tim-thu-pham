@@ -1096,6 +1096,35 @@ function updateSysNotices() {
   }
 }
 
+// ---------- Firebase setup / placeholder guard (restored: trial build had dropped it, so Create Room did nothing) ----------
+const cfg = window.__FIREBASE_CONFIG__ || {};
+const isPlaceholder = !cfg.apiKey || String(cfg.apiKey).includes("PLACEHOLDER")
+  || !cfg.databaseURL || String(cfg.databaseURL).includes("PLACEHOLDER");
+let db = null;
+let auth = null;
+let myUid = null;
+let myName = "";
+let roomCode = "";
+let isHost = false;
+let hostUid = "";
+let myPrivate = {};
+let publicState = {};
+let myVote = null;
+if (isPlaceholder) {
+  show("configWarn", true);
+  if ($("createBtn")) $("createBtn").disabled = true;
+  if ($("joinBtn")) $("joinBtn").disabled = true;
+  if ($("lobbyStatus")) $("lobbyStatus").textContent = "Chưa có config Firebase thật nên chưa tạo / vào phòng được. Xem README.md để cấu hình.";
+} else {
+  const app = initializeApp(cfg);
+  auth = getAuth(app);
+  db = getDatabase(app);
+  onAuthStateChanged(auth, (user) => { if (user) myUid = user.uid; });
+  signInAnonymously(auth).catch((err) => {
+    if ($("lobbyStatus")) $("lobbyStatus").textContent = `Không đăng nhập ẩn danh được: ${err.message}. Hãy kiểm tra Anonymous Auth đã bật trong Firebase chưa (xem README.md).`;
+  });
+}
+
 // ---------- Actions ----------
 if ($("micBtn")) $("micBtn").addEventListener("click", toggleMic);
 if ($("missionToggleBtn")) $("missionToggleBtn").addEventListener("click", () => {
@@ -1106,7 +1135,8 @@ if ($("missionToggleBtn")) $("missionToggleBtn").addEventListener("click", () =>
   if (!collapsed) renderMissionBar();
 });
 $("createBtn").addEventListener("click", async () => {
-  if (isPlaceholder || !myUid) return;
+  if (isPlaceholder) { $("lobbyStatus").textContent = "Chưa có config Firebase thật nên chưa tạo phòng được."; return; }
+  if (!myUid) { $("lobbyStatus").textContent = "Đang đăng nhập ẩn danh, bác chờ vài giây rồi bấm Tạo phòng lại. Nếu vẫn không được, kiểm tra Anonymous Auth đã bật trong Firebase chưa."; return; }
   myName = $("playerName").value.trim();
   if (!myName) { $("lobbyStatus").textContent = "Hãy nhập tên của bạn trước."; return; }
   roomCode = randomCode();
@@ -1121,7 +1151,8 @@ $("createBtn").addEventListener("click", async () => {
 });
 
 $("joinBtn").addEventListener("click", async () => {
-  if (isPlaceholder || !myUid) return;
+  if (isPlaceholder) { $("lobbyStatus").textContent = "Chưa có config Firebase thật nên chưa vào phòng được."; return; }
+  if (!myUid) { $("lobbyStatus").textContent = "Đang đăng nhập ẩn danh, bác chờ vài giây rồi bấm lại."; return; }
   myName = $("playerName").value.trim();
   const code = $("roomCodeInput").value.trim().toUpperCase();
   if (!myName) { $("lobbyStatus").textContent = "Hãy nhập tên của bạn trước."; return; }
