@@ -45,7 +45,7 @@ function clueIcon(typeLabel, i) {
 const PHASE_LABELS = {
   lobby: "Chờ người chơi",
   secret: "Nhận nhiệm vụ bí mật",
-  investigation: "Điều tra hiện trường",
+  investigation: "Di chuyển — tìm dấu vết",
   vote: "Bỏ phiếu",
   reveal: "Công bố kết quả",
 };
@@ -142,6 +142,168 @@ function tallyVotes(votes) {
   return { counts, top, leaders, tie: leaders.length > 1, accusedUid: leaders.length === 1 ? leaders[0] : null };
 }
 
+// ---------- Movement prototype ----------
+// World 1600x900, viewport canvas 960x540, camera follows local player.
+// No wall collision in prototype, only world bounds. Positions sync at
+// ~10/sec to rooms/{code}/public/positions/{uid}.
+const WORLD_W = 1600, WORLD_H = 900, VIEW_W = 960, VIEW_H = 540;
+const MAP_ZONES = [
+  { name: "Vườn", x: 0, y: 0, w: 600, h: 450, color: "#7ec850" },
+  { name: "Sân sau", x: 600, y: 0, w: 1000, h: 450, color: "#f2d492" },
+  { name: "Phòng khách", x: 0, y: 450, w: 700, h: 450, color: "#f7a8b8" },
+  { name: "Bếp", x: 700, y: 450, w: 500, h: 450, color: "#a8d8ea" },
+  { name: "Hành lang", x: 1200, y: 450, w: 400, h: 450, color: "#d8c7a8" },
+];
+const TRACE_SPOTS = [
+  { x: 200, y: 200 }, { x: 820, y: 170 }, { x: 1350, y: 260 },
+  { x: 300, y: 680 }, { x: 920, y: 720 }, { x: 1420, y: 660 },
+];
+let myPos = null, movePositions = {}, moveTraces = {}, myClues = [];
+let moveLoopOn = false, lastMoveTick = 0, lastPosSync = 0, posSpawned = false, posAttached = false;
+let keysDown = {}, joyVec = { x: 0, y: 0 };
+let botWanderOn = false, botTargets = {};
+function buildTraces(mission) {
+  const loc = (mission && mission.location) || "hiện trường";
+  const texts = [
+    ...(mission && mission.clues ? mission.clues : []),
+    `Dấu chân lạ dẫn qua ${loc}, chưa rõ của ai.`,
+    `Một vật nhỏ ở ${loc} bị xê dịch khỏi chỗ cũ.`,
+    `Có tiếng động nhỏ ở ${loc} trước khi phát hiện hiện trường.`,
+    `Còn sót lại một sợi chỉ / mảnh vụn lạ ở ${loc}.`,
+  ].slice(0, 6);
+  const out = {};
+  texts.forEach((text, i) => { out[`t${i + 1}`] = { x: TRACE_SPOTS[i].x, y: TRACE_SPOTS[i].y, text }; });
+  return out;
+}
+function renderNotebook() {
+  $("notebookList").innerHTML = myClues.length
+    ? myClues.map((c) => `<li>🔍 ${esc(c)}</li>`).join("")
+    : `<li class="small">Chưa nhặt được dấu vết nào. Hãy đi tìm các dấu sáng vàng trên bản đồ.</li>`;
+}
+function nearestTrace() {
+  if (!myPos) return null;
+  let best = null, bestD = 80;
+  Object.entries(moveTraces || {}).forEach(([id, t]) => {
+    const d = Math.hypot(t.x - myPos.x, t.y - myPos.y);
+    if (d < bestD) { bestD = d; best = { id, ...t }; }
+  });
+  return best;
+}
+function syncPos(force) {
+  if (!db || !roomCode || !myUid || !myPos) return;
+  const now = Date.now();
+  if (!force && now - lastPosSync < 100) return;
+  lastPosSync = now;
+  set(ref(db, `rooms/${roomCode}/public/positions/${myUid}`), { x: Math.round(myPos.x), y: Math.round(myPos.y) }).catch(() => {});
+}
+function attachPositions() {
+  if (posAttached || !db || !roomCode) return;
+  posAttached = true;
+  onValue(ref(db, `rooms/${roomCode}/public/positions`), (snap) => {
+    movePositions = snap.val() || {};
+    if (!posSpawned && myUid && !movePositions[myUid]) {
+      const uids = publicState.players ? Object.keys(publicState.players) : [myUid];
+      const idx = Math.max(0, uids.indexOf(myUid));
+      myPos = { x: 800 + ((idx % 3) - 1) * 90, y: 450 + Math.floor(idx / 3) * 90 };
+      posSpawned = true;
+      syncPos(true);
+    } else if (movePositions[myUid] && !myPos) {
+      myPos = { x: movePositions[myUid].x, y: movePositions[myUid].y };
+    }
+  });
+  onValue(ref(db, `rooms/${roomCode}/public/traces`), (snap) => { moveTraces = snap.val() || {}; });
+}
+function drawBeanCanvas(ctx, x, y, color, name, isBot, ghost, isMe) {
+  ctx.save();
+  if (ghost) ctx.globalAlpha = 0.45;
+  ctx.fillStyle = color; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(x - 22, y - 30, 44, 48, 18); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#cfe8ff"; ctx.beginPath(); ctx.ellipse(x, y - 8, 16, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#111827"; ctx.fillRect(x - 14, y + 18, 12, 8); ctx.fillRect(x + 2, y + 18, 12, 8);
+  ctx.font = "bold 15px system-ui"; ctx.textAlign = "center";
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 4;
+  ctx.strokeText(name, x, y - 38); ctx.fillText(name, x, y - 38);
+  if (isBot) { ctx.font = "bold 11px system-ui"; ctx.fillStyle = "#059669"; ctx.fillText("BOT", x, y + 38); }
+  if (isMe) { ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 2, 34, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+function drawMovement() {
+  const canvas = $("moveCanvas"); if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const camX = myPos ? Math.max(0, Math.min(WORLD_W - VIEW_W, myPos.x - VIEW_W / 2)) : 0;
+  const camY = myPos ? Math.max(0, Math.min(WORLD_H - VIEW_H, myPos.y - VIEW_H / 2)) : 0;
+  ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+  MAP_ZONES.forEach((z) => {
+    ctx.fillStyle = z.color; ctx.fillRect(z.x - camX, z.y - camY, z.w, z.h);
+    ctx.strokeStyle = "rgba(17,24,39,.5)"; ctx.lineWidth = 3; ctx.strokeRect(z.x - camX, z.y - camY, z.w, z.h);
+    ctx.font = "bold 26px system-ui"; ctx.fillStyle = "rgba(17,24,39,.65)"; ctx.textAlign = "left";
+    ctx.fillText(z.name, z.x - camX + 18, z.y - camY + 40);
+  });
+  const pulse = 6 + Math.sin(Date.now() / 300) * 3;
+  Object.values(moveTraces || {}).forEach((t) => {
+    const sx = t.x - camX, sy = t.y - camY;
+    ctx.save(); ctx.fillStyle = "rgba(250,204,21,.35)"; ctx.beginPath(); ctx.arc(sx, sy, 26 + pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#facc15"; ctx.strokeStyle = "#111827"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 18); ctx.lineTo(sx + 14, sy); ctx.lineTo(sx, sy + 18); ctx.lineTo(sx - 14, sy); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#111827"; ctx.font = "bold 18px system-ui"; ctx.textAlign = "center"; ctx.fillText("!", sx, sy + 6); ctx.restore();
+  });
+  const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+  players.forEach((p) => {
+    const pos = movePositions[p.uid]; if (!pos) return;
+    drawBeanCanvas(ctx, pos.x - camX, pos.y - camY, colorFor(p.uid), p.name, !!p.isBot, p.alive === false, p.uid === myUid);
+  });
+  const near = nearestTrace();
+  const btn = $("traceActionBtn");
+  if (near && btn) {
+    show("traceActionBtn", true);
+    btn.textContent = myPrivate.role === "culprit" ? "🕵️ Giấu dấu vết này" : "🔍 Xem / Nhặt dấu vết";
+    $("moveStatus").textContent = "Bạn đang ở gần một dấu vết. Bấm nút góc phải để tương tác.";
+  } else if (btn) { show("traceActionBtn", false); }
+}
+function moveTick(ts) {
+  if (!moveLoopOn) return;
+  requestAnimationFrame(moveTick);
+  if (!myPos) { drawMovement(); return; }
+  const dt = Math.min(0.05, (ts - lastMoveTick) / 1000 || 0.016); lastMoveTick = ts;
+  let vx = 0, vy = 0;
+  if (keysDown["w"] || keysDown["arrowup"]) vy -= 1;
+  if (keysDown["s"] || keysDown["arrowdown"]) vy += 1;
+  if (keysDown["a"] || keysDown["arrowleft"]) vx -= 1;
+  if (keysDown["d"] || keysDown["arrowright"]) vx += 1;
+  vx += joyVec.x; vy += joyVec.y;
+  const len = Math.hypot(vx, vy);
+  if (len > 0) {
+    myPos.x = Math.max(24, Math.min(WORLD_W - 24, myPos.x + (vx / Math.max(1, len)) * 280 * dt * (len > 1 ? 1 : len)));
+    myPos.y = Math.max(24, Math.min(WORLD_H - 24, myPos.y + (vy / Math.max(1, len)) * 280 * dt * (len > 1 ? 1 : len)));
+    syncPos(false);
+  }
+  drawMovement();
+}
+function startMovement() {
+  attachPositions(); renderNotebook();
+  if (!moveLoopOn) { moveLoopOn = true; lastMoveTick = performance.now(); requestAnimationFrame(moveTick); }
+}
+function startBotWander() {
+  if (botWanderOn || !db || !roomCode) return;
+  botWanderOn = true;
+  setInterval(async () => {
+    if (!isHost || publicState.phase !== "investigation" || !publicState.botFill) return;
+    const players = publicState.players ? Object.entries(publicState.players).map(([uid, p]) => ({ uid, ...p })) : [];
+    const bots = players.filter((p) => p.isBot && p.alive !== false);
+    for (const b of bots) {
+      const cur = movePositions[b.uid] || { x: 800, y: 450 };
+      if (!botTargets[b.uid] || Math.hypot(botTargets[b.uid].x - cur.x, botTargets[b.uid].y - cur.y) < 60) {
+        botTargets[b.uid] = { x: 100 + Math.random() * 1400, y: 100 + Math.random() * 700 };
+      }
+      const t = botTargets[b.uid];
+      const d = Math.hypot(t.x - cur.x, t.y - cur.y) || 1;
+      const nx = Math.max(24, Math.min(WORLD_W - 24, cur.x + (t.x - cur.x) / d * 55));
+      const ny = Math.max(24, Math.min(WORLD_H - 24, cur.y + (t.y - cur.y) / d * 55));
+      await set(ref(db, `rooms/${roomCode}/public/positions/${b.uid}`), { x: Math.round(nx), y: Math.round(ny) }).catch(() => {});
+    }
+  }, 1000);
+}
+
 // ---------- Firebase setup / placeholder guard ----------
 const cfg = window.__FIREBASE_CONFIG__ || {};
 const isPlaceholder = !cfg.apiKey || String(cfg.apiKey).includes("PLACEHOLDER")
@@ -232,15 +394,13 @@ function renderPublic() {
     $("startBtn").textContent = "Bắt đầu ván chơi";
   }
 
-  // Investigation
+  // Movement phase (prototype, replaces old text investigation cards)
   if (phase === "investigation") {
     attachChat();
-    $("sceneArt").innerHTML = sceneSVG(publicState.missionTypeLabel || "");
-    $("sceneLabel").textContent = publicState.scene || "";
-    $("clueList").innerHTML = (publicState.clues || []).map((c, i) => (
-      `<div class="card clue clue-card"><span class="clue-icon">${clueIcon(publicState.missionTypeLabel || "", i)}</span><span><strong>Manh mối ${i + 1}:</strong> ${esc(c)}</span></div>`
-    )).join("");
+    startMovement();
+    $("sceneLabel").textContent = publicState.scene || "Hãy đi tìm các dấu sáng vàng trên bản đồ.";
     show("toVoteBtn", isHost);
+    if (isHost) startBotWander();
   }
 
   // Vote
@@ -526,8 +686,10 @@ $("startBtn").addEventListener("click", async () => {
   await update(publicRef(), {
     phase: "secret", scene: mission.scene, clues: mission.clues, secretReady: false,
     votes: null, chat: null, reveal: null, missionTypeLabel: mission.typeLabel,
-    botFill, botCount: botsNeeded, botNames,
+    botFill, botCount: botsNeeded, botNames, positions: null,
   });
+  // Movement prototype: host creates 6 traces spread across the map.
+  await set(ref(db, `rooms/${roomCode}/public/traces`), buildTraces(mission)).catch(() => {});
 
   // Vai trò riêng tư: mỗi người chỉ đọc được node của chính mình (xem Rules trong README).
   // Bản sao assignments nằm chung trong node riêng của chủ phòng, để cuối ván
@@ -595,7 +757,64 @@ $("culpritReadyBtn").addEventListener("click", async () => {
 
 $("toInvestigationBtn").addEventListener("click", async () => {
   if (!isHost) return;
+  // Fallback: if traces were not created at start, create them now from
+  // the public clues/scene (never naming the culprit).
+  try {
+    const tSnap = await get(ref(db, `rooms/${roomCode}/public/traces`));
+    if (!tSnap.exists()) {
+      await set(ref(db, `rooms/${roomCode}/public/traces`), buildTraces({ location: "hiện trường", clues: publicState.clues || [] }));
+    }
+  } catch (_) {}
   await update(publicRef(), { phase: "investigation" });
+});
+
+// Movement controls: keyboard + virtual joystick, trace action, meeting.
+document.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  const inInput = e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT");
+  if (!inInput && ["arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
+  if (!inInput) keysDown[k] = true;
+});
+document.addEventListener("keyup", (e) => { keysDown[e.key.toLowerCase()] = false; });
+(function setupJoystick() {
+  const base = $("joyBase"), knob = $("joyKnob");
+  if (!base || !knob) return;
+  let active = null;
+  const updateJoy = (clientX, clientY) => {
+    const r = base.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let dx = (clientX - cx) / 40, dy = (clientY - cy) / 40;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { dx /= len; dy /= len; }
+    joyVec = { x: dx, y: dy };
+    knob.style.transform = `translate(${dx * 28}px, ${dy * 28}px)`;
+  };
+  base.addEventListener("pointerdown", (e) => { active = e.pointerId; base.setPointerCapture(active); updateJoy(e.clientX, e.clientY); });
+  base.addEventListener("pointermove", (e) => { if (e.pointerId === active) updateJoy(e.clientX, e.clientY); });
+  const endJoy = (e) => { if (e.pointerId === active) { active = null; joyVec = { x: 0, y: 0 }; knob.style.transform = ""; } };
+  base.addEventListener("pointerup", endJoy);
+  base.addEventListener("pointercancel", endJoy);
+})();
+$("traceActionBtn").addEventListener("click", async () => {
+  const near = nearestTrace();
+  if (!near || !db || !roomCode) return;
+  if (myPrivate.role === "culprit") {
+    // Culprit hides: trace disappears for everyone, no clue for anyone.
+    await set(ref(db, `rooms/${roomCode}/public/traces/${near.id}`), null).catch(() => {});
+    $("moveStatus").textContent = "Bạn đã giấu dấu vết. Người khác tới đây sẽ không còn thấy gì.";
+  } else {
+    if (!myClues.includes(near.text)) myClues.push(near.text);
+    renderNotebook();
+    await set(ref(db, `rooms/${roomCode}/public/traces/${near.id}`), null).catch(() => {});
+    $("moveStatus").textContent = "Đã nhặt dấu vết, xem trong Sổ manh mối của bạn.";
+  }
+});
+$("meetingBtn").addEventListener("click", async () => {
+  // Prototype route: any player may call a meeting. Public node is writable
+  // by any authenticated player under the suggested Rules, so this works
+  // without waiting for the host. Host-only button (toVoteBtn) still exists.
+  if (!db || !roomCode) return;
+  await update(publicRef(), { phase: "vote", meetingBy: myName }).catch(() => {});
 });
 
 $("sendChatBtn").addEventListener("click", async () => {
