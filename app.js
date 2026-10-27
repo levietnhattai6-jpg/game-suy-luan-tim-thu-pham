@@ -472,8 +472,8 @@ function drawMovement() {
   const btn = $("traceActionBtn");
   if (nearObj && btn) {
     show("traceActionBtn", true);
-    btn.textContent = myPrivate.role === "culprit" ? `🕵️ Giấu dấu vết ở ${nearObj.name}` : `🔍 Xem ${nearObj.name}`;
-    $("moveStatus").textContent = `Bạn đang ở ${area.loc} — ${area.name}, gần ${nearObj.name}. Bấm nút góc phải để xem — có thể có dấu vết, cũng có thể không có gì. Bấm "🚪 Cửa ra" để sang khu vực khác.`;
+    btn.textContent = myPrivate.role === "culprit" ? `🕵️ Giấu ở ${nearObj.name}` : `🔍 Mở ${nearObj.name}`;
+    $("moveStatus").textContent = `Gần ${nearObj.name} — bấm Mở ở góc phải.`;
   } else if (btn) { show("traceActionBtn", false); }
   const doorBtn = $("doorBtn");
   if (doorBtn) {
@@ -614,17 +614,17 @@ function renderPublic() {
     startMovement();
     $("sceneLabel").textContent = publicState.scene || "Hãy giải câu đố trong Sổ manh mối rồi đi tìm đúng đồ vật.";
     if (myPrivate.role === "culprit") {
-      $("roleHud").textContent = "🦆 Bạn là VỊT XẤU (thủ phạm) — giả dạng capybara, tìm dấu vết để giấu, loại người khi có cơ hội, phá hoại khi cần.";
-      $("missionHud").textContent = myPrivate.mission ? `Nhiệm vụ bí mật: ${myPrivate.mission.typeLabel} — ${myPrivate.mission.detail}` : "";
+      $("roleHud").textContent = "🦆 VỊT XẤU — giả dạng capybara.";
+      $("missionHud").textContent = myPrivate.mission ? `Nhiệm vụ bí mật: ${myPrivate.mission.typeLabel}` : "";
     } else if (myPrivate.role === "accomplice") {
-      $("roleHud").textContent = "🦆 Bạn là VỊT ĐỒNG BỌN — chỉ bạn và thủ phạm biết. Giúp đánh lạc hướng.";
+      $("roleHud").textContent = "🦆 VỊT ĐỒNG BỌN — chỉ bạn và thủ phạm biết.";
       $("missionHud").textContent = "";
     } else if (myPrivate.role === "dodo") {
-      $("roleHud").textContent = "🐦 Bạn là DODO — bạn thắng NGAY nếu bị bỏ phiếu loại ra trong họp. Hãy tỏ ra đáng ngờ vừa đủ.";
+      $("roleHud").textContent = "🐦 DODO — thắng ngay nếu bị bỏ phiếu loại.";
       $("missionHud").textContent = "";
     } else {
-      $("roleHud").textContent = "🦫 Bạn là CAPYBARA TỐT — làm 5 nhiệm vụ, giải câu đố, đi tìm dấu vết trong đồ vật.";
-      $("missionHud").textContent = `Nhiệm vụ: ${tasksDoneCount()} / 5 đã xong. ${publicState.scene || ""}`;
+      $("roleHud").textContent = "🦫 CAPYBARA TỐT";
+      $("missionHud").textContent = `Nhiệm vụ: ${tasksDoneCount()} / 5 · Manh mối: ${myCollectedIds.length} / 6`;
     }
     const sabSt = sabotageActive();
     if (sabSt) $("missionHud").textContent += sabSt.type === "lights" ? " ⚠️ Đèn đang tắt!" : " 🔒 Cửa đang khóa!";
@@ -1069,15 +1069,24 @@ function renderMissionBar() {
   $("missionBarProgress").textContent = `Nhiệm vụ: ${tasksDoneCount()} / 5 đã xong. Tiến độ dấu vết: đã tìm ${myCollectedIds.length} / 6 — còn ${remaining} dấu vết trên bản đồ.`;
   const taskHtml = TASKS.map((t) => `<li>${tp[t.id] ? "✅" : "⬜"} Nhiệm vụ: ${t.label} — ${tp[t.id] ? "Đã xong" : "Chưa xong"}</li>`).join("");
   window.__taskHtml = taskHtml;
-  $("missionBarClues").innerHTML = (window.__taskHtml || "") + RIDDLES.map((r) => {
-    const idx = myCollectedIds.indexOf(r.objectId);
-    if (idx >= 0) {
-      const obj = objectById(r.objectId);
-      return `<li>✅ Đã tìm ở ${obj ? obj.room : ""}: ${esc(myClues[idx] || "")}</li>`;
-    }
-    return `<li>${esc(r.riddle)}</li>`;
+  // GGD-simple: the collapsed bar re-opens ONLY already-collected clues.
+  // Unopened items show nothing here — their clue appears only in the
+  // in-frame popup when the player opens that item. The bar never auto-expands.
+  const collectedHtml = myCollectedIds.map((id, i) => {
+    const obj = objectById(id);
+    return `<li>✅ ${obj ? obj.name : id}: ${esc(myClues[i] || "")}</li>`;
   }).join("");
+  $("missionBarClues").innerHTML = (window.__taskHtml || "")
+    + (collectedHtml || `<li class="small">Chưa có manh mối nào — đi tới một món đồ và bấm Mở để xem manh mối của nó.</li>`);
 }
+// In-frame clue popup: open an item -> popup shows its clue; close -> back to movement.
+function showCluePopup(title, text) {
+  const pop = $("cluePopup"); if (!pop) return;
+  $("cluePopupTitle").textContent = title;
+  $("cluePopupText").textContent = text;
+  show("cluePopup", true);
+}
+function hideCluePopup() { show("cluePopup", false); }
 function updateSysNotices() {
   const box = $("sysNoticeBox");
   if (!box) return;
@@ -1131,7 +1140,7 @@ if ($("missionToggleBtn")) $("missionToggleBtn").addEventListener("click", () =>
   const bar = $("missionBar");
   if (!bar) return;
   const collapsed = bar.classList.toggle("collapsed");
-  $("missionToggleBtn").textContent = collapsed ? "▲ Hiện nhiệm vụ & manh mối" : "▼ Ẩn nhiệm vụ & manh mối";
+  $("missionToggleBtn").textContent = collapsed ? "▲ Mở nhiệm vụ & manh mối" : "▼ Thu gọn";
   if (!collapsed) renderMissionBar();
 });
 $("createBtn").addEventListener("click", async () => {
@@ -1322,6 +1331,7 @@ document.addEventListener("keyup", (e) => { keysDown[e.key.toLowerCase()] = fals
   base.addEventListener("pointerup", endJoy);
   base.addEventListener("pointercancel", endJoy);
 })();
+if ($("cluePopupCloseBtn")) $("cluePopupCloseBtn").addEventListener("click", hideCluePopup);
 $("traceActionBtn").addEventListener("click", async () => {
   const obj = nearestObject();
   if (!obj || !db || !roomCode) return;
@@ -1331,32 +1341,34 @@ $("traceActionBtn").addEventListener("click", async () => {
     const tp = taskProgress();
     if (task && !tp[task.id]) {
       if (isDuckRole(myPrivate.role)) {
-        $("moveStatus").textContent = `Bạn giả vờ làm nhiệm vụ: ${task.label}. Nhiệm vụ này KHÔNG được tính cho phe Capybara.`;
+        showCluePopup(`🎭 ${obj.name}`, `Bạn giả vờ làm nhiệm vụ: ${task.label}. Nhiệm vụ này KHÔNG được tính cho phe Capybara.`);
         return;
       }
       if (myPrivate.role === "dodo") {
-        $("moveStatus").textContent = `Dodo cũng có thể làm nhiệm vụ cho vui, nhưng nhiệm vụ của Dodo không tính vào tiến độ thắng của Capybara.`;
+        showCluePopup(`🐦 ${obj.name}`, `Dodo cũng có thể làm nhiệm vụ cho vui, nhưng nhiệm vụ của Dodo không tính vào tiến độ thắng của Capybara.`);
         return;
       }
       await update(publicRef(), { [`taskProgress/${task.id}`]: true }).catch(() => {});
-      $("moveStatus").textContent = `✅ Đã làm xong nhiệm vụ: ${task.label} (${tasksDoneCount() + 1} / 5).`;
+      showCluePopup(`✅ ${obj.name}`, `Đã làm xong nhiệm vụ: ${task.label} (${tasksDoneCount() + 1} / 5).`);
       renderMissionBar();
       return;
     }
-    // Decoy: same interaction, funny "nothing here", object stays.
-    const lines = ["Không có gì ở đây. Chỉ là đồ đạc bình thường thôi.", "Bạn lục kỹ rồi — ở đây sạch bong, không có dấu vết.", "Không có gì lạ ở đây cả. Thử câu đố khác xem."];
-    $("moveStatus").textContent = lines[Math.floor(Math.random() * lines.length)];
+    // Decoy: same interaction, popup says nothing here, object stays.
+    const lines = ["Không có gì ở đây. Chỉ là đồ đạc bình thường thôi.", "Bạn lục kỹ rồi — ở đây sạch bong, không có dấu vết.", "Không có gì lạ ở đây cả. Thử mở món đồ khác xem."];
+    showCluePopup(`🔍 ${obj.name}`, lines[Math.floor(Math.random() * lines.length)]);
     return;
   }
   if (myPrivate.role === "culprit") {
     // Culprit hides: trace disappears for everyone, no clue for anyone.
     await set(ref(db, `rooms/${roomCode}/public/traces/${obj.id}`), null).catch(() => {});
-    $("moveStatus").textContent = "Bạn đã giấu dấu vết. Người khác tới đây sẽ không còn thấy gì.";
+    showCluePopup(`🕵️ ${obj.name}`, "Bạn đã giấu dấu vết. Người khác tới đây sẽ không còn thấy gì.");
   } else {
     if (!myCollectedIds.includes(obj.id)) { myCollectedIds.push(obj.id); myClues.push(trace.text); }
     renderNotebook();
+    renderMissionBar();
     await set(ref(db, `rooms/${roomCode}/public/traces/${obj.id}`), null).catch(() => {});
-    $("moveStatus").textContent = "Đã nhặt dấu vết, xem trong Sổ manh mối của bạn.";
+    // Approved behaviour: opening an item shows its clue in a popup.
+    showCluePopup(`🔍 Manh mối — ${obj.name}`, `${trace.text}\n\nĐã lưu vào tag nhiệm vụ (bấm ▲ Mở nhiệm vụ & manh mối để xem lại). Đóng popup là chơi tiếp ngay.`);
   }
 });
 
@@ -1502,6 +1514,7 @@ function renderAreaPicker() {
 if ($("doorBtn")) $("doorBtn").addEventListener("click", () => {
   const sab = sabotageActive();
   if (sab && sab.type === "doors") return;
+  hideCluePopup();
   renderAreaPicker();
   show("areaPicker", true);
 });

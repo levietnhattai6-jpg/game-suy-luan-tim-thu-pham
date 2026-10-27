@@ -23,6 +23,17 @@
   #areaPicker { position: absolute; inset: 0; z-index: 30; background: rgba(15,23,42,.92); color: #fff; overflow: auto; padding: 18px; }
   #areaPicker button { width: auto; }
   .mission-bar { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 20; margin: 0; max-height: 180px; overflow: auto; }
+  .mission-bar.collapsed { max-height: none; overflow: visible; background: transparent; border: 0; box-shadow: none; padding: 0; }
+  .mission-bar.collapsed #missionBarBody { display: none; }
+  /* GGD-simple in-game HUD: one room only, minimal overlay, clue popup in-frame */
+  #investigationCard > h2, #investigationCard > p.landscape-banner, #sceneLabel { display: none !important; }
+  .move-side { display: none !important; }
+  .move-hud { max-width: 520px; font-size: 15px; padding: 8px 12px; }
+  .move-hud .small { font-size: 13px; }
+  #cluePopup { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; width: min(520px, 86vw); background: #fffdf5; border: 3px solid #312e81; border-radius: 20px; padding: 18px; box-shadow: 0 10px 0 rgba(0,0,0,.3); color: #1f2937; }
+  #cluePopup h3 { margin: 0 0 8px; color: #312e81; font-size: 19px; }
+  #cluePopup p { font-size: 17px; line-height: 1.6; margin: 0 0 12px; }
+  #cluePopup button { width: auto; margin: 0; }
   #meetingBtn { position: absolute; left: auto; right: 14px; bottom: 500px; z-index: 20; width: auto; min-width: 190px; margin: 0; }
   #moveStatus { position: absolute; left: 140px; right: 220px; bottom: 200px; z-index: 20; background: rgba(0,0,0,.55); color: #fff; padding: 6px 10px; border-radius: 10px; }
   .hero-row img { width: 100%; max-width: 720px; height: auto; border-radius: 16px; }
@@ -255,15 +266,15 @@
       <button id="reportBtn" class="move-action hidden" style="bottom:134px;background:#f59e0b;box-shadow:0 4px 0 #92400e;">📣 Báo xác</button>
       <button id="sabotageLightsBtn" class="move-action hidden" style="bottom:194px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">💡 Tắt đèn (phá hoại)</button>
       <button id="sabotageDoorsBtn" class="move-action hidden" style="bottom:254px;background:#312e81;box-shadow:0 4px 0 #1e1b4b;">🔒 Khóa cửa (phá hoại)</button>
-      <button id="doorBtn" type="button">🚪 Cửa ra — chọn khu vực khác</button>
+      <button id="doorBtn" type="button">🚪 Cửa ra</button>
       <div id="areaPicker" class="hidden">
         <h2 style="color:#fff">🚪 Chọn khu vực — vào khu vực nào chỉ thấy riêng khu vực đó</h2>
         <p class="small" style="color:#e2e8f0">Mỗi địa điểm có nhiều khu vực. Bấm một khu vực để vào, màn hình sẽ đổi sang đúng hình khu vực đó.</p>
         <div id="areaPickerList"></div>
         <button id="areaPickerCloseBtn" type="button" class="secondary" style="width:auto">Đóng, ở lại khu vực này</button>
       </div>
-    <div id="missionBar" class="mission-bar">
-      <button id="missionToggleBtn" class="mission-toggle" type="button">▼ Ẩn nhiệm vụ &amp; manh mối</button>
+    <div id="missionBar" class="mission-bar collapsed">
+      <button id="missionToggleBtn" class="mission-toggle" type="button">▲ Mở nhiệm vụ &amp; manh mối</button>
       <div id="missionBarBody">
         <div id="missionBarRole" class="msg"></div>
         <div id="missionBarProgress" class="small"></div>
@@ -271,7 +282,12 @@
       </div>
     </div>
     <p id="moveStatus" class="small msg"></p>
-    <button id="meetingBtn">🚨 Họp khẩn — chuyển sang bỏ phiếu</button>
+    <button id="meetingBtn">🚨 Họp khẩn</button>
+    <div id="cluePopup" class="hidden">
+      <h3 id="cluePopupTitle">Manh mối</h3>
+      <p id="cluePopupText"></p>
+      <button id="cluePopupCloseBtn" type="button">Đóng, chơi tiếp</button>
+    </div>
     </div>
     
     <div class="move-side">
